@@ -8,7 +8,7 @@ local GeoJson = {
             return eps.pointInsideRegion(
                 
                 {(r1[1][1]+r1[2][1])*0.5,
-                (r1[1][2]+r1[1][1])*0.5},r2)
+                (r1[1][2]+r1[2][2])*0.5},r2)
         end
         
         function newNode(reg)
@@ -68,8 +68,13 @@ local GeoJson = {
                 last_y = curr_y
             end
             local isclockwise = winding < 0
+            print("ISCLOCK "..winding  )
             if isclockwise ~= clockwise then
-                table.Reverse(copy)
+                print("FORCED")
+                --table.Reverse(copy)
+                for i = 1, math.floor(#copy/2), 1 do
+                    copy[i], copy[#copy-i+1] = copy[#copy-i+1], copy[i]
+                end
             end
             -- Make Last Point First Point, Probably could remove this
             -- table.insert(copy,{copy[1][1],copy[1][2]})
@@ -79,7 +84,7 @@ local GeoJson = {
         local geopolys = {}
 
         function addExterior(node)
-            local poly = {forceWinding(node.region, false)}
+            local poly = {forceWinding(node.region, true)}
             table.insert(geopolys,poly)
 
             for i=1, #node.children do
