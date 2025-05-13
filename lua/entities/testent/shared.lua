@@ -488,24 +488,51 @@ end
 function ENT:OnTakeDamage(damage)
     local damagepos = damage:GetDamagePosition()
     if not CLIENT then
-        print("DAMAGE")
-        print(damagepos) 
-        self:UpdateMeshHit(self:WorldToLocal(damagepos))
+        localDamagePos = self:WorldToLocal(damagepos)
+        
         --self:PhysicsFromMesh(self.physicsPoly)
+        local x = math.floor(localDamagePos.x*100)
+        local z = math.floor(localDamagePos.z*100)
+        local sentHitPos = Vector(x/100,0,z/100)
+        print("DAMAGEDAMAGE")
+        print(sentHitPos)
+        self:UpdateMeshHit(sentHitPos)
+        net.Start( "WallHit"..self:EntIndex() )
+            net.WriteInt( x,16 )
+            net.WriteInt( z,16 )
+		net.Broadcast() --Send all the data between now and the last net.Start() to the server.
     end
  end
 
-function ENT:ImpactTrace(trace,dmgtype,customimpactname)
+--[[ function ENT:ImpactTrace(trace,dmgtype,customimpactname)
     local damagepos = trace.HitPos
 	if CLIENT then
         print(self:WorldToLocal(damagepos))
         self:UpdateMeshHit(self:WorldToLocal(damagepos))
     end
 end
-
+ ]]
 
 function ENT:Initialize()
     --trianglePoly()
+    if not CLIENT then
+        util.AddNetworkString( "WallHit"..self:EntIndex() )
+    end
+    if CLIENT then 
+        
+        local WallHitReceived = function( lengthOfMessageReceived, playerWhoSentTheMessageToUs )
+		-- Note how we read them all in the same order as they are written:
+		local x = net.ReadInt(16) --Read the first part of the message.
+        local z = net.ReadInt(16)
+        local localDamagePos = Vector(x/100,0,z/100)
+		-- Now let's print them out with tabs between each one:
+        print("RECIEVED")
+		print(localDamagePos)
+        self:UpdateMeshHit(localDamagePos)
+        end
+        net.Receive( "WallHit"..self:EntIndex(), WallHitReceived )
+	end
+
     local current_polygons = {}
     if CLIENT then
         self:CreateMesh()
@@ -518,6 +545,7 @@ function ENT:Initialize()
 	
     
     if not CLIENT then
+        
         --self:PhysicsInitConvex(GetVerts())
         self:SetModel("models/props_c17/FurnitureCouch002a.mdl") -- Sets the model for the Entity.
         self:PhysicsDestroy()
@@ -558,6 +586,7 @@ function ENT:CreateMesh()
 end
 
 function ENT:UpdateMeshHit(localhitpos)
+
     local subject = self.RenderPoly
     local clip = { regions = {{{-5,-5}, {2.5,-6}, {5,-5},{6,0}, {5,5}, {0,6}, {-5,5},{-7,2},{-7,0}}},inverted =false }
     --local clip = { regions = {{{-5,-5}, {5,-5}, {5,5}, {-5,5}}},inverted =false }
@@ -573,8 +602,24 @@ function ENT:UpdateMeshHit(localhitpos)
     if CLIENT then
         self:BuildMeshFromPositions(positions, points_outer)
     end
+    local positionsTriangles = {pos = positions}
     self:PhysicsFromMesh( positions )
+    print("PHYSFORMMESH")
 end
+
+function dump(o)
+   if type(o) == 'table' then
+      local s = '{ '
+      for k,v in pairs(o) do
+         if type(k) ~= 'number' then k = '"'..k..'"' end
+         s = s .. '['..k..'] = ' .. dump(v) .. ','
+      end
+      return s .. '} '
+   else
+      return tostring(o)
+   end
+end
+
 
 function calculateOuterPositions(out_polygon)
     points_outer = {}
