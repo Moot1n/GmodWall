@@ -140,11 +140,11 @@ local function connectHoles2(outer, holes)
             p2 = copy[inext]
             local seg = {p1,p2}
             -- Check if the hole global rightmost point is to the left of a segment from the 
-            print("CHECK "..global_rightmost[1].." "..global_rightmost[2])
-            print("AGAINST ("..seg[1][1]..", "..seg[1][2].."), ("..seg[2][1]..", "..seg[2][2]..")")
+            -- print("CHECK "..global_rightmost[1].." "..global_rightmost[2])
+            -- print("AGAINST ("..seg[1][1]..", "..seg[1][2].."), ("..seg[2][1]..", "..seg[2][2]..")")
             
             if pointLeftOfSeg2(global_rightmost, seg) == true then
-                print("OK")
+                -- print("OK")
                 --print(i)
                 if leftmostseg == nil  then 
                     leftmostseg = seg 
@@ -382,21 +382,11 @@ end
 function ENT:trianglePoly(subject, clip)
     
     local output = PolyBool.difference(subject,clip)
-    local poly = new_poly{}
+    
     local geoOutput = PolyBool.polygonToGeoJSON(output)
     --print("GEOOUTPUT")
-    local sub2 = geoOutput.coordinates
-    local holes = {}
-   -- print(#sub2)
-    for i = 1, #sub2 do
-       -- print("Geo Polygon "..i)
-        for j = 2, #sub2[i] do
-         --   print("region "..j)
-            if i == 1 then
-                table.insert(holes,sub2[i][j])
-            end
-        end
-    end
+    local polygons = geoOutput.coordinates
+    
 
     --[[ print("GEOOUTPUT")
     for i = 1, #sub2 do
@@ -419,65 +409,54 @@ function ENT:trianglePoly(subject, clip)
         end
     end ]]
 
-    local polyconnect = connectHoles2(sub2[1][1], holes)
-    
-   --print("POLYCONNECT")
-    --print(polyconnect)
-    local sub = sub2[1][1]
-    for i = 1, #polyconnect do
-        --print(polyconnect[i][1], polyconnect[i][2])
-        local inext = i+1
-        if inext > #polyconnect then inext = 1 end
-        local vector1 = Vector(polyconnect[i][1], 0, polyconnect[i][2])
-        local vector2 = Vector(polyconnect[inext][1], 0, polyconnect[inext][2])
-        
-        --debugoverlay.Line(self:LocalToWorld(vector1), self:LocalToWorld(vector2),2, Color( 255, 0, 0 ))
-        
-        poly:push_coord(polyconnect[i][1],polyconnect[i][2])
-    end
-    
-    
+    -- print(#sub2)
+    -- Get triangle soup of all polygons
+    -- Find all seperate polygons
+    -- Connect holes for each part
+    -- Triangulate part
+    local positions = {}
+    for p_i = 1, #polygons do
+        -- For each polygon
+        local poly = new_poly{}
+        -- Get hole regions
+        local holes = {}
+        for j = 1, #polygons[p_i] do
+            region = polygons[p_i][j]
+            if j >= 2 then
+                table.insert(holes,region)
+            end
 
-
-    --[[ local sub = output.regions
-    
-    for i, result in ipairs(sub) do
-        if i == #sub then
-            print("result "..i..": ")
-            
-            for j = 1, #result do
-                print(
-                    "x"..(j)..": "..result[j][1],
-                    "y"..(j)..": "..result[j][2]
-                )
-                poly:push_coord(result[j][1],result[j][2])
+            for k = 1, #region do
+                local knext = k+1
+                if knext > #region then knext = 1 end
+                local vector1 = Vector(region[k][1], 0, region[k][2])
+                local vector2 = Vector(region[knext][1], 0, region[knext][2])
+                debugoverlay.Line(self:LocalToWorld(vector1), self:LocalToWorld(vector2),2, Color( 0, 255, 0 ))
             end
         end
-    end ]]
-    
-    poly:close()
-    local triangles = poly:get_triangles()
-    
-    print("TriangleasdPol")
-    local positions = {}
-    for i = 1, #triangles do
-        for j =1, 3 do
-            local i1 = triangles[i][j]
-            local x,y = poly:get_coord(i1)
-            table.insert(positions, Vector(x,0,y))
-            
+
+        
+
+        local polyconnect = connectHoles2(polygons[p_i][1], holes)
+
+        for i = 1, #polyconnect do
+            local inext = i+1
+            if inext > #polyconnect then inext = 1 end
+            local vector1 = Vector(polyconnect[i][1], 0, polyconnect[i][2])
+            local vector2 = Vector(polyconnect[inext][1], 0, polyconnect[inext][2])
+            --debugoverlay.Line(self:LocalToWorld(vector1), self:LocalToWorld(vector2),2, Color( 255, 0, 0 ))
+            poly:push_coord(polyconnect[i][1],polyconnect[i][2])
         end
-        --[[ local i1 = triangles[i][1]
-        local i2 = triangles[i][2]
-        local i3 = triangles[i][3]
-        local x1,y1 = poly:get_coord(i1)
-        local x2,y2 = poly:get_coord(i2)
-        local x3,y3 = poly:get_coord(i3)
-        print(crossProduct({x2-x1,y2-y1},{x3-x1,y3-y1})>0) ]]
+        poly:close()
+        local triangles = poly:get_triangles()
+        for i = 1, #triangles do
+            for j =1, 3 do
+                local i1 = triangles[i][j]
+                local x,y = poly:get_coord(i1)
+                table.insert(positions, Vector(x,0,y))
+            end
+        end
     end
-    --for i = 1, #positions do
-    --    print(positions[i])
-    --end
    
     return output, positions;
 end
@@ -565,27 +544,8 @@ function ENT:CreateMesh()
         Vector( 0, 0,0 ),
     }
     local out_polygon, positions = self:GetVerts()
-    local mesh = mesh
-    self.RenderMesh = Mesh(self.Material)
     self.RenderPoly = out_polygon
-    mesh.Begin(self.RenderMesh, MATERIAL_TRIANGLES, math.floor(#positions/3))
-    
-    local j = 1
-    for i = 1, #positions do
-        --mesh.TexCoord( texcoord[j])
-        mesh.TexCoord( 0, positions[i].x/10, positions[i].z/10)
-        --mesh.TexCoord( 1, positions[i].x/10, positions[i].z/10)
-        mesh.Position( positions[i]*self.mdlScale)
-        mesh.Normal(Vector(0,1,0))
-        --mesh.TangentS(Vector(1,0,0))
-        --mesh.TangentS(Vector(1,0,0))
-        mesh.AdvanceVertex()
-        j = j+1
-        if j > 3 then
-            j = 1
-        end
-    end
-    mesh.End()
+    self:BuildMeshFromPositions(positions)
 end
 
 function ENT:UpdateMeshHit(localhitpos)
@@ -605,6 +565,11 @@ function ENT:UpdateMeshHit(localhitpos)
     end
     local out_polygon, positions = self:trianglePoly(subject, clip);
     self.RenderPoly = out_polygon
+    self:BuildMeshFromPositions(positions)
+end
+
+function ENT:BuildMeshFromPositions(positions)
+    
     --if not CLIENT then
     --self:PhysicsFromMesh(positions)
     --    return
@@ -615,7 +580,7 @@ function ENT:UpdateMeshHit(localhitpos)
     
     print("SUBJECT")
     print(self.RenderPoly)
-    mesh.Begin(self.RenderMesh, MATERIAL_TRIANGLES, math.floor(#positions/3))
+    mesh.Begin(self.RenderMesh, MATERIAL_TRIANGLES, math.floor(#positions/3)*2)
     local j = 1
     for i = 1, #positions do
         --mesh.TexCoord( texcoord[j])
@@ -629,5 +594,22 @@ function ENT:UpdateMeshHit(localhitpos)
             j = 1
         end
     end
+
+    j = 1
+    for i = #positions, 1,-1 do
+        --mesh.TexCoord( texcoord[j])
+        local newPos = positions[i]
+        newPos.y = 5
+        mesh.TexCoord( 0, positions[i].x/10, positions[i].z/10)
+        --mesh.TexCoord( 2, texcoord[j].x,texcoord[j].y)
+        mesh.Position( newPos*self.mdlScale)
+        mesh.Normal(Vector(0,-1,0))
+        mesh.AdvanceVertex()
+        j = j+1
+        if j > 3 then
+            j = 1
+        end
+    end
+
     mesh.End()
 end
