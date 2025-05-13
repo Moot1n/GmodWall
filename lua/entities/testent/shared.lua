@@ -491,15 +491,15 @@ function ENT:OnTakeDamage(damage)
         localDamagePos = self:WorldToLocal(damagepos)
         
         --self:PhysicsFromMesh(self.physicsPoly)
-        local x = math.floor(localDamagePos.x*100)
-        local z = math.floor(localDamagePos.z*100)
-        local sentHitPos = Vector(x/100,0,z/100)
+        local x = math.floor(localDamagePos.x*1000)
+        local z = math.floor(localDamagePos.z*1000)
+        local sentHitPos = Vector(x/1000,0,z/1000)
         print("DAMAGEDAMAGE")
         print(sentHitPos)
         self:UpdateMeshHit(sentHitPos)
         net.Start( "WallHit"..self:EntIndex() )
-            net.WriteInt( x,16 )
-            net.WriteInt( z,16 )
+            net.WriteInt( x,19 )
+            net.WriteInt( z,19 )
 		net.Broadcast() --Send all the data between now and the last net.Start() to the server.
     end
  end
@@ -522,9 +522,9 @@ function ENT:Initialize()
         
         local WallHitReceived = function( lengthOfMessageReceived, playerWhoSentTheMessageToUs )
 		-- Note how we read them all in the same order as they are written:
-		local x = net.ReadInt(16) --Read the first part of the message.
-        local z = net.ReadInt(16)
-        local localDamagePos = Vector(x/100,0,z/100)
+		local x = net.ReadInt(19) --Read the first part of the message.
+        local z = net.ReadInt(19)
+        local localDamagePos = Vector(x/1000,0,z/1000)
 		-- Now let's print them out with tabs between each one:
         print("RECIEVED")
 		print(localDamagePos)
@@ -536,9 +536,14 @@ function ENT:Initialize()
     local current_polygons = {}
     if CLIENT then
         self:CreateMesh()
+        self:EnableCustomCollisions(true)
         self:SetRenderBounds( self.Mins, self.Maxs )
-
-        self:DrawShadow( false )
+        if self:GetPhysicsObject():IsValid() then
+            self:GetPhysicsObject():EnableMotion(false)
+            self:GetPhysicsObject():SetMass(50000)  // make sure to call these on client or else when you touch it, you will crash
+            self:GetPhysicsObject():SetPos(self:GetPos())
+            self:GetPhysicsObject():Wake()
+        end
     end
     
 
@@ -552,17 +557,17 @@ function ENT:Initialize()
         self:PhysicsFromMesh( self:GetVertsPhys() )
         self:SetSolid( SOLID_VPHYSICS ) -- Makes the Entity solid, allowing for collisions.
         self:SetMoveType( MOVETYPE_NONE ) -- Sets how the Entity moves, using physics.
-        self:EnableCustomCollisions()
+        self:EnableCustomCollisions(true)
         self:GetPhysicsObject():EnableMotion(false)
+        self:GetPhysicsObject():SetMass(50000)
+        self:DrawShadow(false)
+
         --self:PhysicsInit( SOLID_VPHYSICS ) -- Initializes physics for the Entity, making it solid and interactable.
        
         
         
         -- Enable custom collisions on the entity
         -- self:PhysicsInitConvex( self:GetVertsPhys())
-    end
-    if CLIENT then
-        self:PhysicsFromMesh( self:GetVertsPhys() )
     end
 	--self:GetPhysicsObject():EnableMotion( false )
 
@@ -578,6 +583,7 @@ function ENT:Initialize()
     end
 end
 
+
 function ENT:CreateMesh()
     local out_polygon, positions = self:GetVerts()
     self.RenderPoly = out_polygon
@@ -592,8 +598,8 @@ function ENT:UpdateMeshHit(localhitpos)
     --local clip = { regions = {{{-5,-5}, {5,-5}, {5,5}, {-5,5}}},inverted =false }
     for i = 1, #clip.regions do
         for j = 1, #clip.regions[i] do
-            clip.regions[i][j][1] = localhitpos[1] + clip.regions[i][j][1]
-            clip.regions[i][j][2] = localhitpos[3] + clip.regions[i][j][2]
+            clip.regions[i][j][1] = localhitpos[1] + clip.regions[i][j][1]*0.5
+            clip.regions[i][j][2] = localhitpos[3] + clip.regions[i][j][2]*0.5
         end
     end
     local out_polygon, positions = self:trianglePoly(subject, clip);
@@ -602,8 +608,14 @@ function ENT:UpdateMeshHit(localhitpos)
     if CLIENT then
         self:BuildMeshFromPositions(positions, points_outer)
     end
-    local positionsTriangles = {pos = positions}
-    self:PhysicsFromMesh( positions )
+    local positionsTriangles = {}
+    for i = 1, #positions-3, 3 do
+
+        table.Add(positionsTriangles, {{pos =positions[i]},{pos=positions[i+1]},{pos=positions[i+2]}})
+    end
+    self:PhysicsDestroy()
+    print("PHYSFORMMESH")
+    self:PhysicsFromMesh( positionsTriangles )
     print("PHYSFORMMESH")
 end
 
