@@ -414,51 +414,65 @@ function ENT:trianglePoly(subject, clip)
     -- Find all seperate polygons
     -- Connect holes for each part
     -- Triangulate part
+    local outpol = {regions={}, reverse={}}
     local positions = {}
     for p_i = 1, #polygons do
         -- For each polygon
         local poly = new_poly{}
         -- Get hole regions
         local holes = {}
-        for j = 1, #polygons[p_i] do
-            region = polygons[p_i][j]
-            if j >= 2 then
-                table.insert(holes,region)
+        if not is_outer_region_floating(polygons[p_i][1]) then 
+            for j = 1, #polygons[p_i] do
+                region = polygons[p_i][j]
+                table.insert(outpol.regions, region)
+                table.insert(outpol.reverse, j~=1)
+                if j >= 2 then
+                    table.insert(holes,region)
+                end
+
+                for k = 1, #region do
+                    local knext = k+1
+                    if knext > #region then knext = 1 end
+                    local vector1 = Vector(region[k][1], 0, region[k][2])
+                    local vector2 = Vector(region[knext][1], 0, region[knext][2])
+                    debugoverlay.Line(self:LocalToWorld(vector1), self:LocalToWorld(vector2),2, Color( 0, 255, 0 ))
+                end
             end
 
-            for k = 1, #region do
-                local knext = k+1
-                if knext > #region then knext = 1 end
-                local vector1 = Vector(region[k][1], 0, region[k][2])
-                local vector2 = Vector(region[knext][1], 0, region[knext][2])
-                debugoverlay.Line(self:LocalToWorld(vector1), self:LocalToWorld(vector2),2, Color( 0, 255, 0 ))
+            
+
+            local polyconnect = connectHoles2(polygons[p_i][1], holes)
+
+            for i = 1, #polyconnect do
+                local inext = i+1
+                if inext > #polyconnect then inext = 1 end
+                local vector1 = Vector(polyconnect[i][1], 0, polyconnect[i][2])
+                local vector2 = Vector(polyconnect[inext][1], 0, polyconnect[inext][2])
+                --debugoverlay.Line(self:LocalToWorld(vector1), self:LocalToWorld(vector2),2, Color( 255, 0, 0 ))
+                poly:push_coord(polyconnect[i][1],polyconnect[i][2])
             end
-        end
-
-        
-
-        local polyconnect = connectHoles2(polygons[p_i][1], holes)
-
-        for i = 1, #polyconnect do
-            local inext = i+1
-            if inext > #polyconnect then inext = 1 end
-            local vector1 = Vector(polyconnect[i][1], 0, polyconnect[i][2])
-            local vector2 = Vector(polyconnect[inext][1], 0, polyconnect[inext][2])
-            --debugoverlay.Line(self:LocalToWorld(vector1), self:LocalToWorld(vector2),2, Color( 255, 0, 0 ))
-            poly:push_coord(polyconnect[i][1],polyconnect[i][2])
-        end
-        poly:close()
-        local triangles = poly:get_triangles()
-        for i = 1, #triangles do
-            for j =1, 3 do
-                local i1 = triangles[i][j]
-                local x,y = poly:get_coord(i1)
-                table.insert(positions, Vector(x,0,y))
+            poly:close()
+            local triangles = poly:get_triangles()
+            for i = 1, #triangles do
+                for j =1, 3 do
+                    local i1 = triangles[i][j]
+                    local x,y = poly:get_coord(i1)
+                    table.insert(positions, Vector(x,0,y))
+                end
             end
         end
     end
-   
-    return output, positions;
+    return outpol, positions;
+end
+
+function is_outer_region_floating(region)
+    local floating = true
+    for i = 1, #region do
+        if region[i][1] == 0 or region[i][1] == 100 or region[i][2] == 0 or region[i][2] == 100 then
+            floating = false
+        end
+    end
+    return floating
 end
 
 function ENT:GetVertsPhys()
@@ -471,13 +485,12 @@ function ENT:GetVertsPhys()
     return positions
 end
 
-
 function ENT:OnTakeDamage(damage)
     local damagepos = damage:GetDamagePosition()
     if not CLIENT then
         print("DAMAGE")
         print(damagepos) 
-        --self:UpdateMeshHit(self:WorldToLocal(damagepos))
+        self:UpdateMeshHit(self:WorldToLocal(damagepos))
         --self:PhysicsFromMesh(self.physicsPoly)
     end
  end
@@ -538,22 +551,13 @@ function ENT:Initialize()
 end
 
 function ENT:CreateMesh()
-    local texcoord  = {
-        Vector( 0, 0.2, 0.2 ),
-        Vector(  0, 0, 0.2 ),
-        Vector( 0, 0,0 ),
-    }
     local out_polygon, positions = self:GetVerts()
     self.RenderPoly = out_polygon
-    self:BuildMeshFromPositions(positions)
+    points_outer = calculateOuterPositions(out_polygon)
+    self:BuildMeshFromPositions(positions,points_outer)
 end
 
 function ENT:UpdateMeshHit(localhitpos)
-    local texcoord  = {
-        Vector( 0, 0.2, 0.2 ),
-        Vector(  0, 0, 0.2 ),
-        Vector( 0, 0,0 ),
-    }
     local subject = self.RenderPoly
     local clip = { regions = {{{-5,-5}, {2.5,-6}, {5,-5},{6,0}, {5,5}, {0,6}, {-5,5},{-7,2},{-7,0}}},inverted =false }
     --local clip = { regions = {{{-5,-5}, {5,-5}, {5,5}, {-5,5}}},inverted =false }
@@ -565,45 +569,101 @@ function ENT:UpdateMeshHit(localhitpos)
     end
     local out_polygon, positions = self:trianglePoly(subject, clip);
     self.RenderPoly = out_polygon
-    self:BuildMeshFromPositions(positions)
+    points_outer = calculateOuterPositions(out_polygon)
+    if CLIENT then
+        self:BuildMeshFromPositions(positions, points_outer)
+    end
+    self:PhysicsFromMesh( positions )
 end
 
-function ENT:BuildMeshFromPositions(positions)
+function calculateOuterPositions(out_polygon)
+    points_outer = {}
+    regions = out_polygon.regions
+    reverse = out_polygon.reverse
+    for i=1, #regions do
+        do_reverse = reverse[i]
+        print(do_reverse)
+        for j=1, #regions[i] do
+            jnext = j+1
+            if jnext > #regions[i] then jnext = 1 end
+            local p1x = regions[i][j][1]
+            local p1y = regions[i][j][2]
+            local p2x = regions[i][jnext][1]
+            local p2y = regions[i][jnext][2]
+            local thick = 5
+            
+            if do_reverse then
+                
+                -- Build First Triangle
+                table.insert(points_outer, Vector(p1x,0,p1y))
+                table.insert(points_outer, Vector(p2x,0,p2y))
+                table.insert(points_outer, Vector(p2x,thick,p2y))
+
+                -- Build Second Triangle
+                
+                table.insert(points_outer, Vector(p1x,thick,p1y))
+                table.insert(points_outer, Vector(p1x,0,p1y))
+                table.insert(points_outer, Vector(p2x,thick,p2y))
+            else
+                -- Build First Triangle
+                table.insert(points_outer, Vector(p2x,0,p2y))
+                table.insert(points_outer, Vector(p1x,0,p1y))
+                
+                table.insert(points_outer, Vector(p2x,thick,p2y))
+
+                -- Build Second Triangle
+                table.insert(points_outer, Vector(p1x,0,p1y))
+                table.insert(points_outer, Vector(p1x,thick,p1y))
+                
+                table.insert(points_outer, Vector(p2x,thick,p2y))
+            end
+        end
+    end
+    return points_outer
+end
+
+function ENT:BuildMeshFromPositions(positions,points_outer)
     
     --if not CLIENT then
     --self:PhysicsFromMesh(positions)
     --    return
     --end
     --self:PhysicsFromMesh(positions)
+    local texcoord  = {
+        Vector( 0, 0.2, 0.2 ),
+        Vector(  0, 0, 0.2 ),
+        Vector( 0, 0,0 ),
+    }
     local mesh = mesh
     self.RenderMesh = Mesh(self.Material)
     
     print("SUBJECT")
     print(self.RenderPoly)
-    mesh.Begin(self.RenderMesh, MATERIAL_TRIANGLES, math.floor(#positions/3)*2)
-    local j = 1
+    mesh.Begin(self.RenderMesh, MATERIAL_TRIANGLES, math.floor(#positions/3)*2+math.floor(#points_outer/3))
+    
     for i = 1, #positions do
-        --mesh.TexCoord( texcoord[j])
         mesh.TexCoord( 0, positions[i].x/10, positions[i].z/10)
-        --mesh.TexCoord( 2, texcoord[j].x,texcoord[j].y)
         mesh.Position( positions[i]*self.mdlScale)
         mesh.Normal(Vector(0,-1,0))
         mesh.AdvanceVertex()
-        j = j+1
-        if j > 3 then
-            j = 1
-        end
+
     end
 
-    j = 1
+
     for i = #positions, 1,-1 do
-        --mesh.TexCoord( texcoord[j])
         local newPos = positions[i]
         newPos.y = 5
         mesh.TexCoord( 0, positions[i].x/10, positions[i].z/10)
-        --mesh.TexCoord( 2, texcoord[j].x,texcoord[j].y)
         mesh.Position( newPos*self.mdlScale)
         mesh.Normal(Vector(0,-1,0))
+        mesh.AdvanceVertex()
+    end
+
+    local j = 1
+    for i = 1, #points_outer do
+        mesh.TexCoord( 0, texcoord[j].x,texcoord[j].y)
+        mesh.Position( points_outer[i]*self.mdlScale)
+        --mesh.Normal(Vector(0,0,1))
         mesh.AdvanceVertex()
         j = j+1
         if j > 3 then
