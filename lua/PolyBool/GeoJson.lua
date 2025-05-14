@@ -1,7 +1,7 @@
 -- Moot1n Port of GeoJson to Lua
 -- Original https://github.com/velipso/polybooljs/blob/master/lib/geojson.js
 
-
+AddCSLuaFile()
 local GeoJson = {
     fromPolygon = function(PolyBool, eps, poly)
         function regionInsideRegion(r1, r2)

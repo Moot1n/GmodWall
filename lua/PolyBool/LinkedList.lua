@@ -6,7 +6,7 @@
 --
 -- simple linked list implementation that allows you to traverse down nodes and save positions
 --
-
+AddCSLuaFile()
 local function iif(bool, a, b)
 	if (bool) then return a end
 	return b

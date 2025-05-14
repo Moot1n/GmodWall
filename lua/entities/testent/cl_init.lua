@@ -1,3 +1,4 @@
+AddCSLuaFile()
 include("shared.lua")
 
 

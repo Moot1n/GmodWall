@@ -5,7 +5,7 @@
 
    Converted to Lua by EgoMoose
 --]]
-
+AddCSLuaFile()
 local Epsilon = include("PolyBool/Epsilon.lua")
 local Intersecter = include("PolyBool/Intersector.lua")
 local SegmentChainer = include("PolyBool/SegmentChainer.lua")

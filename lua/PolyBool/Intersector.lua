@@ -6,7 +6,7 @@
 --
 -- this is the core work-horse
 --
-
+AddCSLuaFile()
 local function iif(bool, a, b)
 	if (bool) then return a end
 	return b

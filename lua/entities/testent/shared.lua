@@ -1,6 +1,6 @@
 // Maybe try https://github.com/Bigfoot71/2d-polygon-boolean-lua
 // Didn;t work, now try https://github.com/EgoMoose/PolyBool-Lua
-
+AddCSLuaFile()
 local new_poly = include("poly.lua") 
 local PolyBool = include("PolyBool/pbinit.lua")
 
@@ -13,13 +13,15 @@ ENT.Category = "Test entities" -- The category for this Entity in the spawn menu
 ENT.Contact = "STEAM_0:1:12345678" -- The contact details for the author of this Entity.
 ENT.Purpose = "To test the creation of entities." -- The purpose of this Entity.
 ENT.Spawnable = true -- Specifies whether this Entity can be spawned by players in the spawn menu.
+local wall_size = Vector(128,128,0)
 ENT.Mins = Vector( 0, 0, 0 )
-ENT.Maxs = Vector(  100,  16,  100 )
+ENT.Maxs = Vector(  wall_size.x,  16,  wall_size.y )
 ENT.mdlScale = 1
 ENT.Material = Material( "hunter/myplastic" )
+
 function ENT:GetVerts()
-    local subject = { regions = {{{0,0}, {100,0}, {100,100}, {0,100}}}, inverted = false }
-    local clip = { regions = {{{90,90}, {100,90}, {100,110}, {90,110}}},inverted = false }
+    local subject = { regions = {{{0,0}, {wall_size.x,0}, {wall_size.x,wall_size.y}, {0,wall_size.y}}}, inverted = false }
+    local clip = { regions = {{{590,590}, {600,590}, {600,610}, {50,610}}},inverted = false }
     return self:trianglePoly(subject, clip);
 end
 
@@ -468,7 +470,7 @@ end
 function is_outer_region_floating(region)
     local floating = true
     for i = 1, #region do
-        if region[i][1] == 0 or region[i][1] == 100 or region[i][2] == 0 or region[i][2] == 100 then
+        if region[i][1] == 0 or region[i][1] == wall_size.x or region[i][2] == 0 or region[i][2] == wall_size.y then
             floating = false
         end
     end
@@ -487,6 +489,7 @@ end
 
 function ENT:OnTakeDamage(damage)
     local damagepos = damage:GetDamagePosition()
+    local damageAmount = damage:GetBaseDamage()
     if not CLIENT then
         localDamagePos = self:WorldToLocal(damagepos)
         
@@ -494,61 +497,65 @@ function ENT:OnTakeDamage(damage)
         local x = math.floor(localDamagePos.x*1000)
         local z = math.floor(localDamagePos.z*1000)
         local sentHitPos = Vector(x/1000,0,z/1000)
+        local holetype = 0
+        if localDamagePos.x < 0 || localDamagePos.z < 0 || localDamagePos.z > wall_size.y || localDamagePos.x > wall_size.x then
+            return
+        end
+        if damage:IsDamageType(DMG_BLAST) then
+            if damageAmount <=10 then return end
+            if damageAmount > 10 then holetype = 5 end
+            if damageAmount > 80 then holetype = 6 end
+        elseif damage:IsDamageType(DMG_BUCKSHOT) then
+            if damageAmount > 35 then holetype = 3 end
+            if damageAmount > 60 then holetype = 4 end
+            if damageAmount > 100 then holetype = 5 end
+            if damageAmount > 120 then holetype = 6 end
+        else
+            if damageAmount > 35 then holetype = 1 end
+            if damageAmount > 60 then holetype = 2 end
+            if damageAmount > 80 then holetype = 3 end
+            if damageAmount > 100 then holetype = 4 end
+        end
         print("DAMAGEDAMAGE")
         print(sentHitPos)
-        self:UpdateMeshHit(sentHitPos)
+        print(damageAmount)
+        self:UpdateMeshHit(sentHitPos,holetype)
         net.Start( "WallHit"..self:EntIndex() )
+            net.WriteUInt(holetype, 4)
             net.WriteInt( x,19 )
             net.WriteInt( z,19 )
 		net.Broadcast() --Send all the data between now and the last net.Start() to the server.
     end
- end
-
---[[ function ENT:ImpactTrace(trace,dmgtype,customimpactname)
-    local damagepos = trace.HitPos
-	if CLIENT then
-        print(self:WorldToLocal(damagepos))
-        self:UpdateMeshHit(self:WorldToLocal(damagepos))
-    end
 end
- ]]
+
+--[[ function ENT:PhysicsCollide( colData, collider )
+    print("TAKEDAMAGE")
+    
+    self.physicshitpos = colData.HitPos
+    
+end ]]
 
 function ENT:Initialize()
     --trianglePoly()
     if not CLIENT then
         util.AddNetworkString( "WallHit"..self:EntIndex() )
+        self.physicshitpos = nil
     end
     if CLIENT then 
         
         local WallHitReceived = function( lengthOfMessageReceived, playerWhoSentTheMessageToUs )
 		-- Note how we read them all in the same order as they are written:
+        local holetype = net.ReadUInt(4)
 		local x = net.ReadInt(19) --Read the first part of the message.
         local z = net.ReadInt(19)
         local localDamagePos = Vector(x/1000,0,z/1000)
 		-- Now let's print them out with tabs between each one:
-        print("RECIEVED")
-		print(localDamagePos)
-        self:UpdateMeshHit(localDamagePos)
+        --print("RECIEVED")
+		--print(localDamagePos)
+        self:UpdateMeshHit(localDamagePos,holetype)
         end
         net.Receive( "WallHit"..self:EntIndex(), WallHitReceived )
 	end
-
-    local current_polygons = {}
-    if CLIENT then
-        self:CreateMesh()
-        self:EnableCustomCollisions(true)
-        self:SetRenderBounds( self.Mins, self.Maxs )
-        if self:GetPhysicsObject():IsValid() then
-            self:GetPhysicsObject():EnableMotion(false)
-            self:GetPhysicsObject():SetMass(50000)  // make sure to call these on client or else when you touch it, you will crash
-            self:GetPhysicsObject():SetPos(self:GetPos())
-            self:GetPhysicsObject():Wake()
-        end
-    end
-    
-
-	
-    
     if not CLIENT then
         
         --self:PhysicsInitConvex(GetVerts())
@@ -561,26 +568,27 @@ function ENT:Initialize()
         self:GetPhysicsObject():EnableMotion(false)
         self:GetPhysicsObject():SetMass(50000)
         self:DrawShadow(false)
-
-        --self:PhysicsInit( SOLID_VPHYSICS ) -- Initializes physics for the Entity, making it solid and interactable.
-       
-        
-        
-        -- Enable custom collisions on the entity
-        -- self:PhysicsInitConvex( self:GetVertsPhys())
     end
-	--self:GetPhysicsObject():EnableMotion( false )
 
-	
-    if not CLIENT then
-        local phys = self:GetPhysicsObject() -- Retrieves the physics object of the Entity.
-        if phys:IsValid() then -- Checks if the physics object is valid.
-            --phys:SetMass(math.sqrt(phys:GetVolume()))
-            
-            phys:SetMaterial("glass")
-            phys:Wake() -- Activates the physics object, making the Entity subject to physics (gravity, collisions, etc.).
+    
+
+    local current_polygons = {}
+    if CLIENT then
+        self:CreateMesh()
+        self:EnableCustomCollisions(true)
+        self:SetRenderBounds( self.Mins, self.Maxs )
+        if self:GetPhysicsObject():IsValid() then
+            self:GetPhysicsObject():EnableMotion(false)
+            self:GetPhysicsObject():SetMass(50000)  // make sure to call these on client or else when you touch it, you will crash
+            self:GetPhysicsObject():SetPos(self:GetPos())
         end
     end
+    
+
+	
+    
+   
+	--self:GetPhysicsObject():EnableMotion( false )
 end
 
 
@@ -591,15 +599,33 @@ function ENT:CreateMesh()
     self:BuildMeshFromPositions(positions,points_outer)
 end
 
-function ENT:UpdateMeshHit(localhitpos)
-
+function ENT:UpdateMeshHit(localhitpos,holetype)
+    local holesize = 0.8
+    local holesizey = 1
     local subject = self.RenderPoly
     local clip = { regions = {{{-5,-5}, {2.5,-6}, {5,-5},{6,0}, {5,5}, {0,6}, {-5,5},{-7,2},{-7,0}}},inverted =false }
+    if holetype == 0 then
+        clip = { regions = {{{-5,-5}, {5,-5},{6,0}, {5,5}, {0,6}, {-5,5},{-7,2}}},inverted =false }
+    elseif holetype == 1 then
+        holesize = 1
+    elseif holetype == 2 then
+        holesize = 2
+    elseif holetype == 3 then
+        holesize = 3
+    elseif holetype == 4 then
+        holesize = 4
+    elseif holetype == 5 then
+        holesize = 5
+        holesizey = 1.5
+    elseif holetype == 6 then
+        holesize = 6
+        holesizey = 2
+    end
     --local clip = { regions = {{{-5,-5}, {5,-5}, {5,5}, {-5,5}}},inverted =false }
     for i = 1, #clip.regions do
         for j = 1, #clip.regions[i] do
-            clip.regions[i][j][1] = localhitpos[1] + clip.regions[i][j][1]*0.5
-            clip.regions[i][j][2] = localhitpos[3] + clip.regions[i][j][2]*0.5
+            clip.regions[i][j][1] = localhitpos[1] + clip.regions[i][j][1]*holesize
+            clip.regions[i][j][2] = localhitpos[3] + clip.regions[i][j][2]*holesize*holesizey
         end
     end
     local out_polygon, positions = self:trianglePoly(subject, clip);
@@ -614,9 +640,18 @@ function ENT:UpdateMeshHit(localhitpos)
         table.Add(positionsTriangles, {{pos =positions[i]},{pos=positions[i+1]},{pos=positions[i+2]}})
     end
     self:PhysicsDestroy()
-    print("PHYSFORMMESH")
     self:PhysicsFromMesh( positionsTriangles )
-    print("PHYSFORMMESH")
+    self:SetSolid( SOLID_VPHYSICS ) -- Makes the Entity solid, allowing for collisions.
+    self:SetMoveType( MOVETYPE_NONE ) -- Sets how the Entity moves, using physics.
+    if #positionsTriangles == 0 then 
+        if CLIENT then return end
+        self:Remove() 
+        return
+    end
+    self:EnableCustomCollisions(true)
+    self:GetPhysicsObject():EnableMotion(false)
+    self:GetPhysicsObject():SetMass(50000)
+    self:DrawShadow(false)
 end
 
 function dump(o)
@@ -630,6 +665,36 @@ function dump(o)
    else
       return tostring(o)
    end
+end
+
+function ENT:Think()
+    if SERVER then
+        --print(self:GetPhysicsObject():GetPos())
+        --print(self:GetPhysicsObject():IsMotionEnabled())
+        if self.physicshitpos ~= nil then
+            local damagepos = self.physicshitpos
+            localDamagePos = self:WorldToLocal(damagepos)
+            
+            --self:PhysicsFromMesh(self.physicsPoly)
+            local x = math.floor(localDamagePos.x*1000)
+            local z = math.floor(localDamagePos.z*1000)
+            local sentHitPos = Vector(x/1000,0,z/1000)
+            local holetype = 3
+            if localDamagePos.x < 0 || localDamagePos.z < 0 || localDamagePos.z > wall_size.y || localDamagePos.x > wall_size.x then
+                return
+            end
+            print("DAMAGEDAMAGE")
+            print(sentHitPos)
+            print(damageAmount)
+            self:UpdateMeshHit(sentHitPos,holetype)
+            net.Start( "WallHit"..self:EntIndex() )
+                net.WriteUInt(holetype, 4)
+                net.WriteInt( x,19 )
+                net.WriteInt( z,19 )
+            net.Broadcast() --Send all the data between now and the last net.Start() to the server.
+            self.physicshitpos = nil
+        end
+    end
 end
 
 

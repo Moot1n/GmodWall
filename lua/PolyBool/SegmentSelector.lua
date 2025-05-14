@@ -6,7 +6,7 @@
 --
 -- filter a list of segments based on boolean operations
 --
-
+AddCSLuaFile()
 local function iif(bool, a, b)
 	if (bool) then return a end
 	return b

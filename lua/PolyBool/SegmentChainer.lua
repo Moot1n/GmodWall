@@ -6,7 +6,7 @@
 --
 -- converts a list of segments into a list of regions, while also removing unnecessary verticies
 --
-
+AddCSLuaFile()
 local function iif(bool, a, b)
 	if (bool) then return a end
 	return b
