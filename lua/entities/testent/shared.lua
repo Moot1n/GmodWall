@@ -14,10 +14,10 @@ ENT.Contact = "STEAM_0:1:12345678" -- The contact details for the author of this
 ENT.Purpose = "To test the creation of entities." -- The purpose of this Entity.
 ENT.Spawnable = true -- Specifies whether this Entity can be spawned by players in the spawn menu.
 local wall_size = Vector(128,128,0)
-ENT.Mins = Vector( 0, 0, 0 )
+ENT.Mins = Vector( -1, -1, -1 )
 ENT.Maxs = Vector(  wall_size.x,  16,  wall_size.y )
 ENT.mdlScale = 1
-ENT.Material = Material( "hunter/myplastic" )
+ENT.Material = Material( "phoenix_storms/gear" )
 
 function ENT:GetVerts()
     local subject = { regions = {{{0,0}, {wall_size.x,0}, {wall_size.x,wall_size.y}, {0,wall_size.y}}}, inverted = false }
@@ -381,14 +381,62 @@ function crossProduct(v1, v2)
     return v1[1] * v2[2] - v1[2]*v2[1]
 end
 
-function ENT:trianglePoly(subject, clip)
-    
+function ENT:intersectPolygons(subject, clip)
     local output = PolyBool.difference(subject,clip)
     
     local geoOutput = PolyBool.polygonToGeoJSON(output)
     --print("GEOOUTPUT")
     local polygons = geoOutput.coordinates
+    return polygons
+end
+
+function ENT:connectPolygonHoles(polygons, p_i, outpol)
+    local holes = {}
+    for j = 1, #polygons[p_i] do
+        region = polygons[p_i][j]
+        table.insert(outpol.regions, region)
+        table.insert(outpol.reverse, j~=1)
+        if j >= 2 then
+            table.insert(holes,region)
+        end
+
+        for k = 1, #region do
+            local knext = k+1
+            if knext > #region then knext = 1 end
+            local vector1 = Vector(region[k][1], 0, region[k][2])
+            local vector2 = Vector(region[knext][1], 0, region[knext][2])
+            --debugoverlay.Line(self:LocalToWorld(vector1), self:LocalToWorld(vector2),2, Color( 0, 255, 0 ))
+        end
+    end
+    local polyconnect = connectHoles2(polygons[p_i][1], holes)
+    return polyconnect
+end
+
+function ENT:triangulatePolygon(polyconnect, positions)
+    local poly = new_poly{}
+    for i = 1, #polyconnect do
+        local inext = i+1
+        if inext > #polyconnect then inext = 1 end
+        local vector1 = Vector(polyconnect[i][1], 0, polyconnect[i][2])
+        local vector2 = Vector(polyconnect[inext][1], 0, polyconnect[inext][2])
+        --debugoverlay.Line(self:LocalToWorld(vector1), self:LocalToWorld(vector2),2, Color( 255, 0, 0 ))
+        poly:push_coord(polyconnect[i][1],polyconnect[i][2])
+    end
+    poly:close()
+    local triangles = poly:get_triangles()
+    for i = 1, #triangles do
+        for j =1, 3 do
+            local i1 = triangles[i][j]
+            local x,y = poly:get_coord(i1)
+            table.insert(positions, Vector(x,0,y))
+        end
+    end
+end
+
+function ENT:trianglePoly(subject, clip)
     
+    
+    polygons = self:intersectPolygons(subject, clip)
 
     --[[ print("GEOOUTPUT")
     for i = 1, #sub2 do
@@ -420,48 +468,13 @@ function ENT:trianglePoly(subject, clip)
     local positions = {}
     for p_i = 1, #polygons do
         -- For each polygon
-        local poly = new_poly{}
+        
         -- Get hole regions
-        local holes = {}
+        
         if not is_outer_region_floating(polygons[p_i][1]) then 
-            for j = 1, #polygons[p_i] do
-                region = polygons[p_i][j]
-                table.insert(outpol.regions, region)
-                table.insert(outpol.reverse, j~=1)
-                if j >= 2 then
-                    table.insert(holes,region)
-                end
-
-                for k = 1, #region do
-                    local knext = k+1
-                    if knext > #region then knext = 1 end
-                    local vector1 = Vector(region[k][1], 0, region[k][2])
-                    local vector2 = Vector(region[knext][1], 0, region[knext][2])
-                    debugoverlay.Line(self:LocalToWorld(vector1), self:LocalToWorld(vector2),2, Color( 0, 255, 0 ))
-                end
-            end
-
             
-
-            local polyconnect = connectHoles2(polygons[p_i][1], holes)
-
-            for i = 1, #polyconnect do
-                local inext = i+1
-                if inext > #polyconnect then inext = 1 end
-                local vector1 = Vector(polyconnect[i][1], 0, polyconnect[i][2])
-                local vector2 = Vector(polyconnect[inext][1], 0, polyconnect[inext][2])
-                --debugoverlay.Line(self:LocalToWorld(vector1), self:LocalToWorld(vector2),2, Color( 255, 0, 0 ))
-                poly:push_coord(polyconnect[i][1],polyconnect[i][2])
-            end
-            poly:close()
-            local triangles = poly:get_triangles()
-            for i = 1, #triangles do
-                for j =1, 3 do
-                    local i1 = triangles[i][j]
-                    local x,y = poly:get_coord(i1)
-                    table.insert(positions, Vector(x,0,y))
-                end
-            end
+            polyconnect = self:connectPolygonHoles(polygons, p_i, outpol)
+            self:triangulatePolygon(polyconnect,positions)
         end
     end
     return outpol, positions;
@@ -528,12 +541,12 @@ function ENT:OnTakeDamage(damage)
     end
 end
 
---[[ function ENT:PhysicsCollide( colData, collider )
+function ENT:PhysicsCollide( colData, collider )
     print("TAKEDAMAGE")
     
-    self.physicshitpos = colData.HitPos
+    --self.physicshitpos = colData.HitPos
     
-end ]]
+end 
 
 function ENT:Initialize()
     --trianglePoly()
@@ -636,8 +649,8 @@ function ENT:UpdateMeshHit(localhitpos,holetype)
     end
     local positionsTriangles = {}
     for i = 1, #positions-3, 3 do
-
-        table.Add(positionsTriangles, {{pos =positions[i]},{pos=positions[i+1]},{pos=positions[i+2]}})
+        local normVec = Vector(0,0,1)
+        table.Add(positionsTriangles, {{pos =positions[i], normal = normVec},{pos=positions[i+1],normal = normVec},{pos=positions[i+2],normal = normVec}})
     end
     self:PhysicsDestroy()
     self:PhysicsFromMesh( positionsTriangles )
@@ -760,38 +773,105 @@ function ENT:BuildMeshFromPositions(positions,points_outer)
     self.RenderMesh = Mesh(self.Material)
     
     print("SUBJECT")
+    print( math.floor(#positions/3)*2+math.floor(#points_outer/3))
     print(self.RenderPoly)
     mesh.Begin(self.RenderMesh, MATERIAL_TRIANGLES, math.floor(#positions/3)*2+math.floor(#points_outer/3))
-    
-    for i = 1, #positions do
-        mesh.TexCoord( 0, positions[i].x/10, positions[i].z/10)
-        mesh.Position( positions[i]*self.mdlScale)
+    local faceNorm = Vector(0,-1,0)
+    --faceNorm:Rotate(-self:GetAngles())
+    for i = 1, #positions-2,3 do
+        
+        
+        local v0 = positions[i]
+        local v1 = positions[i+1]
+        local v2 = positions[i+2]
+
+        local tangentS, tangentT = CalculateTangents(v0, v1, v2)
+        mesh.Position( v0*self.mdlScale)
+        mesh.TexCoord( 0, v0.x/20, v0.z/20)
+        --mesh.TexCoord( 0, 0, 0)
+        mesh.Normal(Vector(0,-1,0))
+        mesh.AdvanceVertex()
+
+        mesh.Position( v1*self.mdlScale)
+        mesh.TexCoord( 0, v1.x/20, v1.z/20)
+        --mesh.TexCoord( 0, 0, 20)
+        mesh.Normal(Vector(0,-1,0))
+        mesh.AdvanceVertex()
+
+        mesh.Position( v2*self.mdlScale)
+        --mesh.TexCoord( 0, 20, 0)
+        mesh.TexCoord( 0, v2.x/20, v2.z/20)
         mesh.Normal(Vector(0,-1,0))
         mesh.AdvanceVertex()
 
     end
 
 
-    for i = #positions, 1,-1 do
-        local newPos = positions[i]
-        newPos.y = 5
-        mesh.TexCoord( 0, positions[i].x/10, positions[i].z/10)
-        mesh.Position( newPos*self.mdlScale)
-        mesh.Normal(Vector(0,-1,0))
+    for i = #positions, 3,-3 do
+        local v0 = positions[i]
+        local v1 = positions[i-1]
+        local v2 = positions[i-2]
+        v0.y = 5
+        v1.y = 5
+        v2.y = 5
+
+        local tangentS, tangentT = CalculateTangents(v0, v1, v2)
+        mesh.Position( v0*self.mdlScale)
+        mesh.TexCoord( 0, v0.x/20, v0.z/20)
+        --mesh.TexCoord( 0, 0, 0)
+        mesh.Normal(Vector(0,1,0))
+        mesh.AdvanceVertex()
+
+        mesh.Position( v1*self.mdlScale)
+        mesh.TexCoord( 0, v1.x/20, v1.z/20)
+        --mesh.TexCoord( 0, 0, 20)
+        mesh.Normal(Vector(0,1,0))
+        mesh.AdvanceVertex()
+
+        mesh.Position( v2*self.mdlScale)
+        --mesh.TexCoord( 0, 20, 0)
+        mesh.TexCoord( 0, v2.x/20, v2.z/20)
+        mesh.Normal(Vector(0,1,0))
         mesh.AdvanceVertex()
     end
 
-    local j = 1
-    for i = 1, #points_outer do
-        mesh.TexCoord( 0, texcoord[j].x,texcoord[j].y)
-        mesh.Position( points_outer[i]*self.mdlScale)
-        --mesh.Normal(Vector(0,0,1))
+    for i = 1, #points_outer-2,3 do
+        local v0 = points_outer[i]
+        local v1 = points_outer[i+1]
+        local v2 = points_outer[i+2]
+
+        mesh.TexCoord( 0, texcoord[1].x,texcoord[1].y)
+        mesh.Position( v0*self.mdlScale)
+        mesh.Normal(Vector(0,0,1))
         mesh.AdvanceVertex()
-        j = j+1
-        if j > 3 then
-            j = 1
-        end
+
+        mesh.TexCoord( 0, texcoord[2].x,texcoord[2].y)
+        mesh.Position( v1*self.mdlScale)
+        mesh.Normal(Vector(0,0,1))
+        mesh.AdvanceVertex()
+
+        mesh.TexCoord( 0, texcoord[3].x,texcoord[3].y)
+        mesh.Position( v2*self.mdlScale)
+        mesh.Normal(Vector(0,0,1))
+        mesh.AdvanceVertex()
+
     end
 
     mesh.End()
+end
+
+
+function CalculateTangents(v0, v1, v2)
+    local edge1 = v1 - v0
+    local edge2 = v2 - v0
+
+    local deltaUV1 = Vector(v1.x - v0.x, v1.z - v0.z,0)
+    local deltaUV2 = Vector(v2.x - v0.x, v2.z - v0.z,0)
+
+    local r = 1 / (deltaUV1.x * deltaUV2.y - deltaUV1.y * deltaUV2.x)
+
+    local tangent = (edge1 * deltaUV2.y - edge2 * deltaUV1.y) * r
+    local bitangent = (edge2 * deltaUV1.x - edge1 * deltaUV2.x) * r
+
+    return tangent:GetNormalized(), bitangent:GetNormalized()
 end
