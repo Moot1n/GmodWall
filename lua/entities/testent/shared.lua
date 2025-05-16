@@ -3,7 +3,8 @@
 AddCSLuaFile()
 local new_poly = include("poly.lua") 
 local PolyBool = include("PolyBool/pbinit.lua")
-
+local Epsilon = include("PolyBool/Epsilon.lua")
+local epsilon = Epsilon()
 -- Defines the Entity's type, base, printable name, and author for shared access (both server and client)
 ENT.Type = "anim" -- Sets the Entity type to 'anim', indicating it's an animated Entity.
 ENT.Base = "base_gmodentity" -- Specifies that this Entity is based on the 'base_gmodentity', inheriting its functionality.
@@ -405,16 +406,16 @@ function ENT:connectPolygonHoles(polygons, p_i, outpol)
             table.insert(holes,region)
         end
 
-        for k = 1, #region do
+        --[[ for k = 1, #region do
             local knext = k+1
             if knext > #region then knext = 1 end
             local vector1 = Vector(region[k][1], 0, region[k][2])
             local vector2 = Vector(region[knext][1], 0, region[knext][2])
             --debugoverlay.Line(self:LocalToWorld(vector1), self:LocalToWorld(vector2),2, Color( 0, 255, 0 ))
-        end
+        end ]]
     end
     local polyconnect = connectHoles2(polygons[p_i][1], holes)
-    return polyconnect
+    return polyconnect, holes
 end
 
 function ENT:triangulatePolygon(polyconnect, positions)
@@ -478,10 +479,11 @@ function ENT:trianglePoly(subject, clip)
         -- For each polygon
         
         -- Get hole regions
-        
+        self.PolygonHoles = {}
         if not is_outer_region_floating(polygons[p_i][1]) then 
             
-            polyconnect = self:connectPolygonHoles(polygons, p_i, outpol)
+            local polyconnect,holes = self:connectPolygonHoles(polygons, p_i, outpol)
+            table.insert(self.PolygonHoles, holes)
             self:triangulatePolygon(polyconnect,positions)
         end
     end
@@ -525,10 +527,11 @@ function ENT:trianglePolyState(InputState)
             -- For each polygon
             
             -- Get hole regions
-            
+            self.PolygonHoles={}
             if not is_outer_region_floating(polygons[p_i][1]) then 
                 
-                polyconnect = self:connectPolygonHoles(polygons, p_i, outpol)
+                local polyconnect,holes = self:connectPolygonHoles(polygons, p_i, outpol)
+                table.insert(self.PolygonHoles, holes)
                 self:triangulatePolygon(polyconnect,positions)
             end
         end
@@ -580,6 +583,16 @@ function ENT:OnTakeDamage(damage)
         if localDamagePos.x < 0 || localDamagePos.z < 0 || localDamagePos.z > wall_size.y || localDamagePos.x > wall_size.x then
             return
         end
+        local isInHole = false
+        for i = 1, #self.PolygonHoles do
+            for j=1, #self.PolygonHoles[i] do
+                if epsilon.pointInsideRegion({localDamagePos.x,localDamagePos.z}, self.PolygonHoles[i][j]) then
+                    isInHole = true 
+                end
+            end
+        end
+
+        if isInHole then return end
         if damage:IsDamageType(DMG_BLAST) then
             if damageAmount <=10 then return end
             if damageAmount > 10 then holetype = 5 end
@@ -622,6 +635,7 @@ end
 function ENT:Initialize()
     --trianglePoly()
     self.tri_calc_state = {state=0,clips={}, polygons={}, p_i=1,outpol = {}, positions={},polyconnect={}}
+    self.PolygonHoles = {}
     if not CLIENT then
         util.AddNetworkString( "WallHit"..self:EntIndex() )
         self.physicshitpos = nil
@@ -788,6 +802,7 @@ function dump(o)
 end
 
 function ENT:Think()
+    self:NextThink( CurTime())
     if SERVER then
         --print(self:GetPhysicsObject():GetPos())
         --print(self:GetPhysicsObject():IsMotionEnabled())
@@ -830,12 +845,12 @@ function ENT:Think()
         --    self:extrude_apply_mesh(out_polygon, positions)
         --    table.remove(self.tri_calc_state.clips,1)
         --end  
-        for i = 1, 6 do
-            self:trianglePolyState(self.tri_calc_state)
-        end
+        
+        self:trianglePolyState(self.tri_calc_state)
+        
     end
     
-    
+    return true
 end
 
 
