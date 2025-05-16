@@ -68,9 +68,9 @@ local GeoJson = {
                 last_y = curr_y
             end
             local isclockwise = winding < 0
-            print("ISCLOCK "..winding  )
+            
             if isclockwise ~= clockwise then
-                print("FORCED")
+                
                 --table.Reverse(copy)
                 for i = 1, math.floor(#copy/2), 1 do
                     copy[i], copy[#copy-i+1] = copy[#copy-i+1], copy[i]

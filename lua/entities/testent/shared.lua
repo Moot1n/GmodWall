@@ -193,9 +193,8 @@ local function connectHoles2(outer, holes)
         local bridgeIndex = leftmostsegidx
         if reflexpointidx ~= nil then
             bridgeIndex = reflexpointidx
-            print("reflexpointidx "..reflexpointidx)
+
         end
-        print("BRIDGEIDX "..bridgeIndex)
         
         local hole = h_copy[r_hole_i]
         local bridgePoint = copy[bridgeIndex]
@@ -382,11 +381,17 @@ function crossProduct(v1, v2)
 end
 
 function ENT:intersectPolygons(subject, clip)
+    local startsdtime = os.clock()
     local output = PolyBool.difference(subject,clip)
-    
+    local endtisdme = os.clock()
+    print("Taken to intersect no geo")
+    print((endtisdme-startsdtime)*1000)
     local geoOutput = PolyBool.polygonToGeoJSON(output)
+     
     --print("GEOOUTPUT")
     local polygons = geoOutput.coordinates
+    
+    
     return polygons
 end
 
@@ -435,9 +440,11 @@ end
 
 function ENT:trianglePoly(subject, clip)
     
-    
+    local starttime = os.clock()
     polygons = self:intersectPolygons(subject, clip)
-
+    local endtime = os.clock()
+    print("TIme taken to intersect! (ms)")
+    print((endtime-starttime)*1000)
     --[[ print("GEOOUTPUT")
     for i = 1, #sub2 do
         print("Geo Polygon "..i)
@@ -464,6 +471,7 @@ function ENT:trianglePoly(subject, clip)
     -- Find all seperate polygons
     -- Connect holes for each part
     -- Triangulate part
+    starttime = os.clock()
     local outpol = {regions={}, reverse={}}
     local positions = {}
     for p_i = 1, #polygons do
@@ -477,7 +485,65 @@ function ENT:trianglePoly(subject, clip)
             self:triangulatePolygon(polyconnect,positions)
         end
     end
+    endtime = os.clock()
+    print("TIme taken to triangulate! (ms)")
+    print((endtime-starttime)*1000)
     return outpol, positions;
+end
+
+-- This function helps spread the calculations out over a few frames
+function ENT:trianglePolyState(InputState)
+    
+    local state = InputState.state
+    
+    if state == 0 then
+        
+        if #InputState.clips <= 1 then return end
+        local subject = self.RenderPoly
+        local clip = InputState.clips[1]
+        print("STATE = ", state)
+        --print("PI ",#clip)
+        
+        InputState.state = 1
+        polygons = self:intersectPolygons(subject, clip)
+        InputState.polygons = polygons
+        InputState.p_i = 1
+        InputState.outpol = {regions={}, reverse={}}
+        InputState.positions = {}
+        print("tabllelen = ", #InputState.clips)
+        table.remove(InputState.clips,1)
+        print("tabllelen = ", #InputState.clips)
+        return
+    end
+    if state == 1 then
+        print("STATE = ", state)
+        InputState.state = 0
+        local outpol = InputState.outpol
+        local polygons = InputState.polygons
+        local positions = InputState.positions
+        for p_i = 1, #polygons do
+            -- For each polygon
+            
+            -- Get hole regions
+            
+            if not is_outer_region_floating(polygons[p_i][1]) then 
+                
+                polyconnect = self:connectPolygonHoles(polygons, p_i, outpol)
+                self:triangulatePolygon(polyconnect,positions)
+            end
+        end
+        //self:extrude_apply_mesh(InputState.outpol, InputState.positions)
+        InputState.state = 2
+        return
+    end
+    if state == 2 then
+        print("STATE = ", state)
+        InputState.state = 0
+        
+        if #InputState.clips <= 1 then return end
+        
+        self:extrude_apply_mesh(InputState.outpol, InputState.positions)
+    end
 end
 
 function is_outer_region_floating(region)
@@ -529,6 +595,11 @@ function ENT:OnTakeDamage(damage)
             if damageAmount > 80 then holetype = 3 end
             if damageAmount > 100 then holetype = 4 end
         end
+        if holetype == 0 then
+            if count_nearby_points(localDamagePos, self.RenderPoly,20,45) then
+                holetype =3
+            end
+        end
         print("DAMAGEDAMAGE")
         print(sentHitPos)
         print(damageAmount)
@@ -550,6 +621,7 @@ end
 
 function ENT:Initialize()
     --trianglePoly()
+    self.tri_calc_state = {state=0,clips={}, polygons={}, p_i=1,outpol = {}, positions={},polyconnect={}}
     if not CLIENT then
         util.AddNetworkString( "WallHit"..self:EntIndex() )
         self.physicshitpos = nil
@@ -612,12 +684,31 @@ function ENT:CreateMesh()
     self:BuildMeshFromPositions(positions,points_outer)
 end
 
+function count_nearby_points(point,polygon,radius,max)
+    local regions = polygon.regions
+    local count = 0
+    local px = point.x
+    local py = point.z
+    for i=1, #regions do
+        for j=1, #regions[i] do
+            local px2 = regions[i][j][1]
+            local py2 = regions[i][j][2]
+            if math.abs(px - px2) < radius && math.abs(py - py2) < radius then
+                count=count+1
+                if count >= max then return true end
+            end
+        end
+    end
+    return false
+end
+
 function ENT:UpdateMeshHit(localhitpos,holetype)
     local holesize = 0.8
     local holesizey = 1
     local subject = self.RenderPoly
     local clip = { regions = {{{-5,-5}, {2.5,-6}, {5,-5},{6,0}, {5,5}, {0,6}, {-5,5},{-7,2},{-7,0}}},inverted =false }
     if holetype == 0 then
+        
         clip = { regions = {{{-5,-5}, {5,-5},{6,0}, {5,5}, {0,6}, {-5,5},{-7,2}}},inverted =false }
     elseif holetype == 1 then
         holesize = 1
@@ -641,7 +732,23 @@ function ENT:UpdateMeshHit(localhitpos,holetype)
             clip.regions[i][j][2] = localhitpos[3] + clip.regions[i][j][2]*holesize*holesizey
         end
     end
-    local out_polygon, positions = self:trianglePoly(subject, clip);
+    if SERVER then
+        --local out_polygon, positions = self:trianglePoly(subject, clip);
+        --self:extrude_apply_mesh(out_polygon, positions)
+        table.insert(self.tri_calc_state.clips, clip)
+        table.insert(self.tri_calc_state.clips, clip)
+    else
+        table.insert(self.tri_calc_state.clips, clip)
+        table.insert(self.tri_calc_state.clips, clip)
+        --local out_polygon, positions = self:trianglePoly(subject, clip);
+        --local starttime = os.clock()
+        --self:extrude_apply_mesh(out_polygon, positions)
+        --print("Extruda Apply mesh time")
+        --print((os.clock()-starttime)*1000)
+    end
+end
+
+function ENT:extrude_apply_mesh(out_polygon, positions)
     self.RenderPoly = out_polygon
     points_outer = calculateOuterPositions(out_polygon)
     if CLIENT then
@@ -708,6 +815,27 @@ function ENT:Think()
             self.physicshitpos = nil
         end
     end
+    if CLIENT then
+        --if #self.tri_calc_state.clip.regions >= 1 then
+            
+        --    local out_polygon, positions = self:trianglePoly(self.RenderPoly, self.tri_calc_state.clip);
+        --    
+        --    self:extrude_apply_mesh(out_polygon, positions)
+        --    self.tri_calc_state.clip = {regions={}}
+        --end
+        self:trianglePolyState(self.tri_calc_state)
+    else
+        --while #self.tri_calc_state.clips ~=0 do
+        --    local out_polygon, positions = self:trianglePoly(self.RenderPoly, self.tri_calc_state.clips[1]);
+        --    self:extrude_apply_mesh(out_polygon, positions)
+        --    table.remove(self.tri_calc_state.clips,1)
+        --end  
+        for i = 1, 6 do
+            self:trianglePolyState(self.tri_calc_state)
+        end
+    end
+    
+    
 end
 
 
@@ -717,7 +845,6 @@ function calculateOuterPositions(out_polygon)
     reverse = out_polygon.reverse
     for i=1, #regions do
         do_reverse = reverse[i]
-        print(do_reverse)
         for j=1, #regions[i] do
             jnext = j+1
             if jnext > #regions[i] then jnext = 1 end
