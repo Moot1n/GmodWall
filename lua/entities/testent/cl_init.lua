@@ -15,10 +15,10 @@ function ENT:Draw()
 end
 
 function ENT:GetRenderMesh()
-    render_SetLocalModelLights()
-    render_SetModelLighting(1, 0.1, 0.1, 0.1)
-    render_SetModelLighting(3, 0.1, 0.1, 0.1)
-    render_SetModelLighting(5, 0.1, 0.1, 0.1)
+    --render_SetLocalModelLights()
+    --render_SetModelLighting(1, 0.1, 0.1, 0.1)
+    --render_SetModelLighting(3, 0.1, 0.1, 0.1)
+    --render_SetModelLighting(5, 0.1, 0.1, 0.1)
     return { Mesh = self.RenderMesh, Material = self.Material }
 end
 

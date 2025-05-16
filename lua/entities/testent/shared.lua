@@ -382,11 +382,8 @@ function crossProduct(v1, v2)
 end
 
 function ENT:intersectPolygons(subject, clip)
-    local startsdtime = os.clock()
     local output = PolyBool.difference(subject,clip)
-    local endtisdme = os.clock()
-    print("Taken to intersect no geo")
-    print((endtisdme-startsdtime)*1000)
+
     local geoOutput = PolyBool.polygonToGeoJSON(output)
      
     --print("GEOOUTPUT")
@@ -441,11 +438,9 @@ end
 
 function ENT:trianglePoly(subject, clip)
     
-    local starttime = os.clock()
+    
     polygons = self:intersectPolygons(subject, clip)
-    local endtime = os.clock()
-    print("TIme taken to intersect! (ms)")
-    print((endtime-starttime)*1000)
+
     --[[ print("GEOOUTPUT")
     for i = 1, #sub2 do
         print("Geo Polygon "..i)
@@ -472,7 +467,7 @@ function ENT:trianglePoly(subject, clip)
     -- Find all seperate polygons
     -- Connect holes for each part
     -- Triangulate part
-    starttime = os.clock()
+
     local outpol = {regions={}, reverse={}}
     local positions = {}
     for p_i = 1, #polygons do
@@ -487,9 +482,7 @@ function ENT:trianglePoly(subject, clip)
             self:triangulatePolygon(polyconnect,positions)
         end
     end
-    endtime = os.clock()
-    print("TIme taken to triangulate! (ms)")
-    print((endtime-starttime)*1000)
+
     return outpol, positions;
 end
 
@@ -528,11 +521,36 @@ function ENT:trianglePolyState(InputState)
             
             -- Get hole regions
             self.PolygonHoles={}
+            
             if not is_outer_region_floating(polygons[p_i][1]) then 
                 
                 local polyconnect,holes = self:connectPolygonHoles(polygons, p_i, outpol)
                 table.insert(self.PolygonHoles, holes)
                 self:triangulatePolygon(polyconnect,positions)
+            else
+                if CLIENT then
+                    local floatingoutpol = {regions={}, reverse={}}
+                    local floatingpositions = {}
+                    local polyconnect,holes = self:connectPolygonHoles(polygons, p_i, floatingoutpol)
+                    self:triangulatePolygon(polyconnect,floatingpositions)
+                    local points_outer = calculateOuterPositions(floatingoutpol)
+                    local floatingmesh = self:generateMeshFromPoints(floatingpositions, points_outer)
+                    local ents = ents
+                    local c_Model2 = ents.CreateClientside("coltest")
+                    
+                    local floaterpos = self:GetPos()
+                    floaterpos.z = floaterpos.z+20
+                    print("GETPOS")
+                    print(self:GetPos())
+                    print(c_Model2:GetPos())
+                    c_Model2:Spawn()
+                    c_Model2.RenderMesh = floatingmesh
+                    c_Model2.Material = self.Material
+                    c_Model2.Pos= floaterpos
+                    c_Model2:SetAngles(self:GetAngles())
+                    --c_Model2:SetRenderOrigin( Vector(wall_size.x,0,wall_size.y ))
+                    --c_Model2:SetRenderOrigin( floaterpos)
+                end
             end
         end
         //self:extrude_apply_mesh(InputState.outpol, InputState.positions)
@@ -542,9 +560,9 @@ function ENT:trianglePolyState(InputState)
     if state == 2 then
         print("STATE = ", state)
         InputState.state = 0
-        if SERVER then
-            if #InputState.clips > 1 then self.RenderPoly = InputState.outpol return end
-        end
+        --if SERVER then
+        --    if #InputState.clips > 1 then self.RenderPoly = InputState.outpol return end
+        --end
         self:extrude_apply_mesh(InputState.outpol, InputState.positions)
     end
 end
@@ -588,6 +606,7 @@ function ENT:OnTakeDamage(damage)
             for j=1, #self.PolygonHoles[i] do
                 if epsilon.pointInsideRegion({localDamagePos.x,localDamagePos.z}, self.PolygonHoles[i][j]) then
                     isInHole = true 
+                    
                 end
             end
         end
@@ -608,6 +627,7 @@ function ENT:OnTakeDamage(damage)
             if damageAmount > 80 then holetype = 3 end
             if damageAmount > 100 then holetype = 4 end
         end
+
         if holetype == 0 then
             if count_nearby_points(localDamagePos, self.RenderPoly,20,45) then
                 holetype =3
@@ -636,6 +656,7 @@ function ENT:Initialize()
     --trianglePoly()
     self.tri_calc_state = {state=0,clips={}, polygons={}, p_i=1,outpol = {}, positions={},polyconnect={}}
     self.PolygonHoles = {}
+    self.floatingPolygons = {}
     if not CLIENT then
         util.AddNetworkString( "WallHit"..self:EntIndex() )
         self.physicshitpos = nil
@@ -724,6 +745,7 @@ function ENT:UpdateMeshHit(localhitpos,holetype)
     if holetype == 0 then
         
         clip = { regions = {{{-5,-5}, {5,-5},{6,0}, {5,5}, {0,6}, {-5,5},{-7,2}}},inverted =false }
+        --clip = { regions = {{{-5,-5}, {5,-5}, {5,5}, {-5,5}}},inverted =false }
     elseif holetype == 1 then
         holesize = 1
     elseif holetype == 2 then
@@ -768,16 +790,16 @@ function ENT:extrude_apply_mesh(out_polygon, positions)
     if CLIENT then
         self:BuildMeshFromPositions(positions, points_outer)
     end
-    local positionsTriangles = {}
-    for i = 1, #positions-3, 3 do
-        local normVec = Vector(0,0,1)
-        table.Add(positionsTriangles, {{pos =positions[i], normal = normVec},{pos=positions[i+1],normal = normVec},{pos=positions[i+2],normal = normVec}})
-    end
+    --local positionsTriangles = {}
+    --for i = 1, #positions-3, 3 do
+    --    local normVec = Vector(0,0,1)
+    --    table.Add(positionsTriangles, {{pos =positions[i], normal = normVec},{pos=positions[i+1],normal = normVec},{pos=positions[i+2],normal = normVec}})
+    --end
     self:PhysicsDestroy()
-    self:PhysicsFromMesh( positionsTriangles )
+    self:PhysicsFromMesh( positions )
     self:SetSolid( SOLID_VPHYSICS ) -- Makes the Entity solid, allowing for collisions.
     self:SetMoveType( MOVETYPE_NONE ) -- Sets how the Entity moves, using physics.
-    if #positionsTriangles == 0 then 
+    if #positions == 0 then 
         if CLIENT then return end
         self:Remove() 
         return
@@ -1002,6 +1024,105 @@ function ENT:BuildMeshFromPositions(positions,points_outer)
     mesh.End()
 end
 
+function ENT:generateMeshFromPoints(positions,points_outer)
+    local texcoord  = {
+        Vector( 0, 0.2, 0.2 ),
+        Vector(  0, 0, 0.2 ),
+        Vector( 0, 0,0 ),
+    }
+    local mesh = mesh
+    outputmesh = Mesh(self.Material)
+    
+
+    mesh.Begin(outputmesh, MATERIAL_TRIANGLES, math.floor(#positions/3)*2+math.floor(#points_outer/3))
+
+    local faceNorm = Vector(0,-1,0)
+    for i = 1, #positions-2,3 do
+        
+        
+        local v0 = positions[i]
+        local v1 = positions[i+1]
+        local v2 = positions[i+2]
+        v0.y = 0
+        v1.y = 0
+        v2.y = 0
+        v0.z=v0.z-20
+        v1.z=v1.z-20
+        v2.z=v2.z-20
+
+        local tangentS, tangentT = CalculateTangents(v0, v1, v2)
+        mesh.Position( v0)
+        mesh.TexCoord( 0, v0.x/20, v0.z/20)
+        mesh.Normal(Vector(0,-1,0))
+        mesh.AdvanceVertex()
+
+        mesh.Position( v1)
+        mesh.TexCoord( 0, v1.x/20, v1.z/20)
+        mesh.Normal(Vector(0,-1,0))
+        mesh.AdvanceVertex()
+
+        mesh.Position( v2)
+        mesh.TexCoord( 0, v2.x/20, v2.z/20)
+        mesh.Normal(Vector(0,-1,0))
+        mesh.AdvanceVertex()
+
+    end
+
+    for i = #positions, 3,-3 do
+        local v0 = positions[i]
+        local v1 = positions[i-1]
+        local v2 = positions[i-2]
+ 
+        v0.y = 5
+        v1.y = 5
+        v2.y = 5
+
+        local tangentS, tangentT = CalculateTangents(v0, v1, v2)
+        mesh.Position( v0)
+        mesh.TexCoord( 0, v0.x/20, v0.z/20)
+        mesh.Normal(Vector(0,1,0))
+        mesh.AdvanceVertex()
+
+        mesh.Position( v1)
+        mesh.TexCoord( 0, v1.x/20, v1.z/20)
+        mesh.Normal(Vector(0,1,0))
+        mesh.AdvanceVertex()
+
+        mesh.Position( v2)
+        mesh.TexCoord( 0, v2.x/20, v2.z/20)
+        mesh.Normal(Vector(0,1,0))
+        mesh.AdvanceVertex()
+    end
+
+    for i = 1, #points_outer-2,3 do
+        local v0 = points_outer[i]
+        local v1 = points_outer[i+1]
+        local v2 = points_outer[i+2]
+
+        v0.z=v0.z-20
+        v1.z=v1.z-20
+        v2.z=v2.z-20
+
+        mesh.TexCoord( 0, texcoord[1].x,texcoord[1].y)
+        mesh.Position( v0)
+        mesh.Normal(Vector(0,0,1))
+        mesh.AdvanceVertex()
+
+        mesh.TexCoord( 0, texcoord[2].x,texcoord[2].y)
+        mesh.Position( v1)
+        mesh.Normal(Vector(0,0,1))
+        mesh.AdvanceVertex()
+
+        mesh.TexCoord( 0, texcoord[3].x,texcoord[3].y)
+        mesh.Position( v2)
+        mesh.Normal(Vector(0,0,1))
+        mesh.AdvanceVertex()
+
+    end
+
+    mesh.End()
+    return outputmesh
+end
 
 function CalculateTangents(v0, v1, v2)
     local edge1 = v1 - v0
