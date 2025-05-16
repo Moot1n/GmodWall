@@ -539,9 +539,9 @@ function ENT:trianglePolyState(InputState)
     if state == 2 then
         print("STATE = ", state)
         InputState.state = 0
-        
-        if #InputState.clips <= 1 then return end
-        
+        if SERVER then
+            if #InputState.clips > 1 then self.RenderPoly = InputState.outpol return end
+        end
         self:extrude_apply_mesh(InputState.outpol, InputState.positions)
     end
 end
