@@ -14,14 +14,20 @@ ENT.Category = "Test entities" -- The category for this Entity in the spawn menu
 ENT.Contact = "STEAM_0:1:12345678" -- The contact details for the author of this Entity.
 ENT.Purpose = "To test the creation of entities." -- The purpose of this Entity.
 ENT.Spawnable = true -- Specifies whether this Entity can be spawned by players in the spawn menu.
-local wall_size = Vector(128,128,0)
+
+ENT.wall_size = Vector(128,128,0)
 ENT.Mins = Vector( -1, -1, -1 )
-ENT.Maxs = Vector(  wall_size.x,  16,  wall_size.y )
+ENT.Maxs = Vector(  ENT.wall_size.x,  16,  ENT.wall_size.y )
 ENT.mdlScale = 1
 ENT.Material = Material( "phoenix_storms/gear" )
 
+function ENT:SetupDataTables()
+	self:NetworkVar( "Float", 0, "Size_X" )
+	self:NetworkVar( "Float", "Size_Y" )
+end
+
 function ENT:GetVerts()
-    local subject = { regions = {{{0,0}, {wall_size.x,0}, {wall_size.x,wall_size.y}, {0,wall_size.y}}}, inverted = false }
+    local subject = { regions = {{{0,0}, {self.wall_size.x,0}, {self.wall_size.x,self.wall_size.y}, {0,self.wall_size.y}}}, inverted = false }
     local clip = { regions = {{{590,590}, {600,590}, {600,610}, {50,610}}},inverted = false }
     return self:trianglePoly(subject, clip);
 end
@@ -489,7 +495,7 @@ function ENT:trianglePoly(subject, clip)
         
         -- Get hole regions
         self.PolygonHoles = {}
-        if not is_outer_region_floating(polygons[p_i][1]) then 
+        if not is_outer_region_floating(polygons[p_i][1], self.wall_size) then 
             
             local polyconnect,holes = self:connectPolygonHoles(polygons, p_i, outpol)
             table.insert(self.PolygonHoles, holes)
@@ -542,7 +548,7 @@ function ENT:trianglePolyState(InputState)
         return
     end
     if state == 2 then
-        print("STATE = ", state)
+        //print("STATE = ", state)
         InputState.state = 0
         local outpol = InputState.outpol
         local polygons = InputState.polygons
@@ -553,7 +559,7 @@ function ENT:trianglePolyState(InputState)
             -- Get hole regions
             self.PolygonHoles={}
             
-            if not is_outer_region_floating(polygons[p_i][1]) then 
+            if not is_outer_region_floating(polygons[p_i][1], self.wall_size) then 
                 
                 local polyconnect,holes = self:connectPolygonHoles(polygons, p_i, outpol)
                 table.insert(self.PolygonHoles, holes)
@@ -571,12 +577,13 @@ function ENT:trianglePolyState(InputState)
                     
                     local floaterpos = self:GetPos()
                     floaterpos.z = floaterpos.z+20
-                    print("GETPOS")
-                    print(self:GetPos())
-                    print(c_Model2:GetPos())
+                    //print("GETPOS")
+                    //print(self:GetPos())
+                    // print(c_Model2:GetPos())
                     c_Model2:Spawn()
                     c_Model2.RenderMesh = floatingmesh
                     c_Model2.Material = self.Material
+                    c_Model2:SetColor(self:GetColor())
                     c_Model2.Pos= floaterpos
                     c_Model2:SetAngles(self:GetAngles())
                     --c_Model2:SetRenderOrigin( Vector(wall_size.x,0,wall_size.y ))
@@ -589,7 +596,7 @@ function ENT:trianglePolyState(InputState)
         return
     end
     if state == 3 then
-        print("STATE = ", state)
+        //print("STATE = ", state)
         InputState.state = 0
         if SERVER then
             if #InputState.clips > 1 then self.RenderPoly = InputState.outpol return end
@@ -598,7 +605,7 @@ function ENT:trianglePolyState(InputState)
     end
 end
 
-function is_outer_region_floating(region)
+function is_outer_region_floating(region,wall_size)
     local floating = true
     for i = 1, #region do
         if region[i][1] == 0 or region[i][1] == wall_size.x or region[i][2] == 0 or region[i][2] == wall_size.y then
@@ -629,7 +636,7 @@ function ENT:OnTakeDamage(damage)
         local z = math.floor(localDamagePos.z*1000)
         local sentHitPos = Vector(x/1000,0,z/1000)
         local holetype = 0
-        if localDamagePos.x < 0 || localDamagePos.z < 0 || localDamagePos.z > wall_size.y || localDamagePos.x > wall_size.x then
+        if localDamagePos.x < -20 || localDamagePos.z < -20 || localDamagePos.z > self.wall_size.y+20 || localDamagePos.x > self.wall_size.x+20 then
             return
         end
         local isInHole = false
@@ -654,12 +661,12 @@ function ENT:OnTakeDamage(damage)
             if damageAmount > 120 then holetype = 6 end
         else
             if damageAmount > 35 then holetype = 1 end
-            if damageAmount > 60 then holetype = 2 end
+            if damageAmount > 50 then holetype = 2 end
             if damageAmount > 80 then holetype = 3 end
             if damageAmount > 100 then holetype = 4 end
         end
 
-        if holetype == 0 then
+        if holetype == 0 || holetype == 1 || holetype == 2 then
             if count_nearby_points(localDamagePos, self.RenderPoly,20,45) then
                 holetype =3
             end
@@ -679,18 +686,24 @@ end
 function ENT:PhysicsCollide( colData, collider )
     print("TAKEDAMAGE")
     
-    --self.physicshitpos = colData.HitPos
+    self.physicsdata = {colData = colData, collider = collider}
     
 end 
 
 function ENT:Initialize()
+    --local wall_size = Vector(128,128,0)
     --trianglePoly()
+    print("SIZEEEE")
+    print(self:GetSize_X())
+    self.wall_size = Vector(self:GetSize_X(),self:GetSize_Y(),0 )
+    self.Mins = Vector( -1, -1, -1 )
+    self.Maxs = Vector(  self.wall_size.x,  16,  self.wall_size.y )
     self.tri_calc_state = {state=0,clips={}, polygons={}, p_i=1,outpol = {}, positions={},polyconnect={},seg1 = {}, seg2 = {}}
     self.PolygonHoles = {}
     self.floatingPolygons = {}
     if not CLIENT then
         util.AddNetworkString( "WallHit"..self:EntIndex() )
-        self.physicshitpos = nil
+        self.physicsdata = nil
     end
     if CLIENT then 
         
@@ -778,8 +791,10 @@ function ENT:UpdateMeshHit(localhitpos,holetype)
         clip = { regions = {{{-5,-5}, {5,-5},{6,0}, {5,5}, {0,6}, {-5,5},{-7,2}}},inverted =false }
         --clip = { regions = {{{-5,-5}, {5,-5}, {5,5}, {-5,5}}},inverted =false }
     elseif holetype == 1 then
-        holesize = 1
+        clip = { regions = {{{-5,-5}, {5,-5},{6,0}, {5,5}, {0,6}, {-5,5},{-7,2}}},inverted =false }
+        holesize = 1.2
     elseif holetype == 2 then
+        clip = { regions = {{{-5,-5}, {5,-5},{6,0}, {5,5}, {0,6}, {-5,5},{-7,2}}},inverted =false }
         holesize = 2
     elseif holetype == 3 then
         holesize = 3
@@ -827,22 +842,22 @@ function ENT:extrude_apply_mesh(out_polygon, positions)
     --    local normVec = Vector(0,0,1)
     --    table.Add(positionsTriangles, {{pos =positions[i], normal = normVec},{pos=positions[i+1],normal = normVec},{pos=positions[i+2],normal = normVec}})
     --end
-    if SERVER then
-        self:PhysicsDestroy()
-        self:PhysicsFromMesh( positions )
-        self:SetSolid( SOLID_VPHYSICS ) -- Makes the Entity solid, allowing for collisions.
-        self:SetMoveType( MOVETYPE_NONE ) -- Sets how the Entity moves, using physics.
 
-        if #positions == 0 then 
-            if CLIENT then return end
-            self:Remove() 
-            return
-        end
-        self:EnableCustomCollisions(true)
-        self:GetPhysicsObject():EnableMotion(false)
-        self:GetPhysicsObject():SetMass(50000)
-        self:DrawShadow(false)
+    self:PhysicsDestroy()
+    self:PhysicsFromMesh( positions )
+    self:SetSolid( SOLID_VPHYSICS ) -- Makes the Entity solid, allowing for collisions.
+    self:SetMoveType( MOVETYPE_NONE ) -- Sets how the Entity moves, using physics.
+
+    if #positions == 0 then 
+        if CLIENT then return end
+        self:Remove() 
+        return
     end
+    self:EnableCustomCollisions(true)
+    self:GetPhysicsObject():EnableMotion(false)
+    self:GetPhysicsObject():SetMass(50000)
+    self:DrawShadow(false)
+
 end
 
 function dump(o)
@@ -859,20 +874,60 @@ function dump(o)
 end
 
 function ENT:Think()
+    
     self:NextThink( CurTime()+0.01)
     if SERVER then
         --print(self:GetPhysicsObject():GetPos())
         --print(self:GetPhysicsObject():IsMotionEnabled())
-        if self.physicshitpos ~= nil then
-            local damagepos = self.physicshitpos
+        if self.physicsdata ~= nil then
+            print("AAAAAABBBB")
+            --local mins, maxs = self.physicsdata.colData.HitObject:SetVelocity(self.physicsdata.colData.HitObject)
+            -- Fix Combine Ball Relfection
+            
+
+
+
+            local damagepos = self.physicsdata.colData.HitPos
             localDamagePos = self:WorldToLocal(damagepos)
             
             --self:PhysicsFromMesh(self.physicsPoly)
             local x = math.floor(localDamagePos.x*1000)
             local z = math.floor(localDamagePos.z*1000)
             local sentHitPos = Vector(x/1000,0,z/1000)
-            local holetype = 3
-            if localDamagePos.x < 0 || localDamagePos.z < 0 || localDamagePos.z > wall_size.y || localDamagePos.x > wall_size.x then
+            local holetype = 6
+
+
+            if self.physicsdata.colData.HitEntity:IsValid() then
+                
+                local mass = self.physicsdata.colData.HitObject:GetMass()
+                local speed = self.physicsdata.colData.Speed
+                local momentum = mass*speed
+                print("MOMENTUM MOMENMTUM")
+                print(momentum)
+                if momentum < 1000 then
+                    self.physicsdata = nil
+                    return 
+                elseif momentum < 5000 then
+                    holetype = 1
+                elseif momentum < 80000 then
+                    holetype = 3
+                elseif momentum < 120000 then
+                    holetype = 5
+                end
+                if self.physicsdata.colData.HitEntity:GetClass() == "prop_combine_ball" then
+                    local normal = Vector(0,1,0)
+                    normal:Rotate(self:GetAngles())
+                    local ballvel = self.physicsdata.colData.TheirOldVelocity
+                    local reflect = ballvel - 2*(ballvel:Dot(normal))*normal
+                    self.physicsdata.colData.HitObject:SetVelocity(reflect)
+                    holetype = 3
+                end
+            else
+                self.physicsdata = nil
+                return 
+            end
+            if localDamagePos.x < -20 || localDamagePos.z < -20 || localDamagePos.z > self.wall_size.y+20 || localDamagePos.x > self.wall_size.x+20 then
+                self.physicsdata = nil
                 return
             end
             print("DAMAGEDAMAGE")
@@ -884,7 +939,7 @@ function ENT:Think()
                 net.WriteInt( x,19 )
                 net.WriteInt( z,19 )
             net.Broadcast() --Send all the data between now and the last net.Start() to the server.
-            self.physicshitpos = nil
+            self.physicsdata = nil
         end
     end
     if CLIENT then
@@ -897,7 +952,6 @@ function ENT:Think()
         --end
 
         self:trianglePolyState(self.tri_calc_state)
-        
     else
         --while #self.tri_calc_state.clips ~=0 do
         --    local out_polygon, positions = self:trianglePoly(self.RenderPoly, self.tri_calc_state.clips[1]);
