@@ -99,6 +99,12 @@ PolyBool = {
 	end,
 	xor = function(poly1, poly2)
 		return operate(poly1, poly2, PolyBool.selectXor)
+	end,
+	differences1 = function(poly1, poly2)
+		return operate_stage1(poly1, poly2)
+	end,
+	differences2 = function(seg1,seg2)
+		return operate_stage2(seg1,seg2,PolyBool.selectDifference)
 	end
 }
 
@@ -110,4 +116,18 @@ function operate(poly1, poly2, selector)
 	return PolyBool.polygon(seg3)
 end
 
+function operate_stage1(poly1, poly2)
+	
+	local seg1 = PolyBool.segments(poly1)
+	
+	local seg2 = PolyBool.segments(poly2)
+	return seg1, seg2
+end
+
+function operate_stage2(seg1,seg2,selector)
+	
+	local comb = PolyBool.combine(seg1, seg2)
+	local seg3 = selector(comb)
+	return PolyBool.polygon(seg3)
+end
 return PolyBool

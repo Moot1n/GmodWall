@@ -382,7 +382,7 @@ function crossProduct(v1, v2)
 end
 
 function ENT:intersectPolygons(subject, clip)
-    local output = PolyBool.difference(subject,clip)
+--[[     local output = PolyBool.difference(subject,clip)
 
     local geoOutput = PolyBool.polygonToGeoJSON(output)
      
@@ -390,6 +390,20 @@ function ENT:intersectPolygons(subject, clip)
     local polygons = geoOutput.coordinates
     
     
+    return polygons ]]
+    local seg1,seg2 = intersectPolygonsStage1(subject, clip)
+    return intersectPolygonsStage2(seg1,seg2)
+end
+
+function intersectPolygonsStage1(subject, clip)
+    local seg1,seg2 = PolyBool.differences1(subject,clip)
+    return seg1,seg2
+end
+
+function intersectPolygonsStage2(seg1,seg2)
+    local output = PolyBool.differences2(seg1,seg2)
+    local geoOutput = PolyBool.polygonToGeoJSON(output)
+    local polygons = geoOutput.coordinates
     return polygons
 end
 
@@ -490,9 +504,7 @@ end
 function ENT:trianglePolyState(InputState)
     
     local state = InputState.state
-    
     if state == 0 then
-        
         if #InputState.clips <= 1 then return end
         local subject = self.RenderPoly
         local clip = InputState.clips[1]
@@ -500,17 +512,36 @@ function ENT:trianglePolyState(InputState)
         --print("PI ",#clip)
         
         InputState.state = 1
-        polygons = self:intersectPolygons(subject, clip)
+        --polygons = self:intersectPolygons(subject, clip)
+        print("time to stage1")
+        local st =os.clock()
+        local seg1,seg2 = intersectPolygonsStage1(subject, clip)
+        InputState.seg1 = seg1
+        InputState.seg2 = seg2
+        local et = os.clock()
+        print((et-st)*1000)
+        print("tabllelen = ", #InputState.clips)
+        table.remove(InputState.clips,1)
+        print("tabllelen = ", #InputState.clips)
+        InputState.state = 1
+        return
+    end
+    if InputState.state == 1 then
+        
+        print("STATE = ", 1)
+        print("time to stage2")
+        st =os.clock()
+        local polygons = intersectPolygonsStage2(InputState.seg1,InputState.seg2)
+        et = os.clock()
+        print((et-st)*1000)
         InputState.polygons = polygons
         InputState.p_i = 1
         InputState.outpol = {regions={}, reverse={}}
         InputState.positions = {}
-        print("tabllelen = ", #InputState.clips)
-        table.remove(InputState.clips,1)
-        print("tabllelen = ", #InputState.clips)
+        InputState.state = 2
         return
     end
-    if state == 1 then
+    if state == 2 then
         print("STATE = ", state)
         InputState.state = 0
         local outpol = InputState.outpol
@@ -554,15 +585,15 @@ function ENT:trianglePolyState(InputState)
             end
         end
         //self:extrude_apply_mesh(InputState.outpol, InputState.positions)
-        InputState.state = 2
+        InputState.state = 3
         return
     end
-    if state == 2 then
+    if state == 3 then
         print("STATE = ", state)
         InputState.state = 0
-        --if SERVER then
-        --    if #InputState.clips > 1 then self.RenderPoly = InputState.outpol return end
-        --end
+        if SERVER then
+            if #InputState.clips > 1 then self.RenderPoly = InputState.outpol return end
+        end
         self:extrude_apply_mesh(InputState.outpol, InputState.positions)
     end
 end
@@ -654,7 +685,7 @@ end
 
 function ENT:Initialize()
     --trianglePoly()
-    self.tri_calc_state = {state=0,clips={}, polygons={}, p_i=1,outpol = {}, positions={},polyconnect={}}
+    self.tri_calc_state = {state=0,clips={}, polygons={}, p_i=1,outpol = {}, positions={},polyconnect={},seg1 = {}, seg2 = {}}
     self.PolygonHoles = {}
     self.floatingPolygons = {}
     if not CLIENT then
@@ -786,8 +817,9 @@ end
 
 function ENT:extrude_apply_mesh(out_polygon, positions)
     self.RenderPoly = out_polygon
-    points_outer = calculateOuterPositions(out_polygon)
+    
     if CLIENT then
+        points_outer = calculateOuterPositions(out_polygon)
         self:BuildMeshFromPositions(positions, points_outer)
     end
     --local positionsTriangles = {}
@@ -795,19 +827,22 @@ function ENT:extrude_apply_mesh(out_polygon, positions)
     --    local normVec = Vector(0,0,1)
     --    table.Add(positionsTriangles, {{pos =positions[i], normal = normVec},{pos=positions[i+1],normal = normVec},{pos=positions[i+2],normal = normVec}})
     --end
-    self:PhysicsDestroy()
-    self:PhysicsFromMesh( positions )
-    self:SetSolid( SOLID_VPHYSICS ) -- Makes the Entity solid, allowing for collisions.
-    self:SetMoveType( MOVETYPE_NONE ) -- Sets how the Entity moves, using physics.
-    if #positions == 0 then 
-        if CLIENT then return end
-        self:Remove() 
-        return
+    if SERVER then
+        self:PhysicsDestroy()
+        self:PhysicsFromMesh( positions )
+        self:SetSolid( SOLID_VPHYSICS ) -- Makes the Entity solid, allowing for collisions.
+        self:SetMoveType( MOVETYPE_NONE ) -- Sets how the Entity moves, using physics.
+
+        if #positions == 0 then 
+            if CLIENT then return end
+            self:Remove() 
+            return
+        end
+        self:EnableCustomCollisions(true)
+        self:GetPhysicsObject():EnableMotion(false)
+        self:GetPhysicsObject():SetMass(50000)
+        self:DrawShadow(false)
     end
-    self:EnableCustomCollisions(true)
-    self:GetPhysicsObject():EnableMotion(false)
-    self:GetPhysicsObject():SetMass(50000)
-    self:DrawShadow(false)
 end
 
 function dump(o)
@@ -824,7 +859,7 @@ function dump(o)
 end
 
 function ENT:Think()
-    self:NextThink( CurTime())
+    self:NextThink( CurTime()+0.01)
     if SERVER then
         --print(self:GetPhysicsObject():GetPos())
         --print(self:GetPhysicsObject():IsMotionEnabled())
@@ -860,7 +895,9 @@ function ENT:Think()
         --    self:extrude_apply_mesh(out_polygon, positions)
         --    self.tri_calc_state.clip = {regions={}}
         --end
+
         self:trianglePolyState(self.tri_calc_state)
+        
     else
         --while #self.tri_calc_state.clips ~=0 do
         --    local out_polygon, positions = self:trianglePoly(self.RenderPoly, self.tri_calc_state.clips[1]);
