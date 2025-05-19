@@ -24,6 +24,7 @@ ENT.Material = Material( "phoenix_storms/gear" )
 function ENT:SetupDataTables()
 	self:NetworkVar( "Float", 0, "Size_X" )
 	self:NetworkVar( "Float", "Size_Y" )
+    self:NetworkVar( "Float", "Thickness" )
 end
 
 function ENT:GetVerts()
@@ -511,7 +512,10 @@ function ENT:trianglePolyState(InputState)
     
     local state = InputState.state
     if state == 0 then
+        
         if #InputState.clips <= 1 then return end
+        
+        
         local subject = self.RenderPoly
         local clip = InputState.clips[1]
         print("STATE = ", state)
@@ -530,8 +534,11 @@ function ENT:trianglePolyState(InputState)
         table.remove(InputState.clips,1)
         print("tabllelen = ", #InputState.clips)
         InputState.state = 1
+        
         return
+        --
     end
+
     if InputState.state == 1 then
         
         print("STATE = ", 1)
@@ -570,7 +577,7 @@ function ENT:trianglePolyState(InputState)
                     local floatingpositions = {}
                     local polyconnect,holes = self:connectPolygonHoles(polygons, p_i, floatingoutpol)
                     self:triangulatePolygon(polyconnect,floatingpositions)
-                    local points_outer = calculateOuterPositions(floatingoutpol)
+                    local points_outer = calculateOuterPositions(floatingoutpol, self.thickness)
                     local floatingmesh = self:generateMeshFromPoints(floatingpositions, points_outer)
                     local ents = ents
                     local c_Model2 = ents.CreateClientside("coltest")
@@ -580,9 +587,10 @@ function ENT:trianglePolyState(InputState)
                     //print("GETPOS")
                     //print(self:GetPos())
                     // print(c_Model2:GetPos())
+                    c_Model2.Material = self.Material
                     c_Model2:Spawn()
                     c_Model2.RenderMesh = floatingmesh
-                    c_Model2.Material = self.Material
+                    
                     c_Model2:SetColor(self:GetColor())
                     c_Model2.Pos= floaterpos
                     c_Model2:SetAngles(self:GetAngles())
@@ -598,10 +606,16 @@ function ENT:trianglePolyState(InputState)
     if state == 3 then
         //print("STATE = ", state)
         InputState.state = 0
-        if SERVER then
-            if #InputState.clips > 1 then self.RenderPoly = InputState.outpol return end
-        end
+        --if SERVER then
+        --    if #InputState.clips > 1 then self.RenderPoly = InputState.outpol return end
+        --end
+        
         self:extrude_apply_mesh(InputState.outpol, InputState.positions)
+        if CLIENT then
+            if #InputState.clips <= #self.holeents then
+                self:PopFakeHole()
+            end 
+        end
     end
 end
 
@@ -639,7 +653,7 @@ function ENT:OnTakeDamage(damage)
         if localDamagePos.x < -20 || localDamagePos.z < -20 || localDamagePos.z > self.wall_size.y+20 || localDamagePos.x > self.wall_size.x+20 then
             return
         end
-        local isInHole = false
+        --[[ local isInHole = false
         for i = 1, #self.PolygonHoles do
             for j=1, #self.PolygonHoles[i] do
                 if epsilon.pointInsideRegion({localDamagePos.x,localDamagePos.z}, self.PolygonHoles[i][j]) then
@@ -649,7 +663,7 @@ function ENT:OnTakeDamage(damage)
             end
         end
 
-        if isInHole then return end
+        if isInHole then return end ]]
         if damage:IsDamageType(DMG_BLAST) then
             if damageAmount <=10 then return end
             if damageAmount > 10 then holetype = 5 end
@@ -696,11 +710,13 @@ function ENT:Initialize()
     print("SIZEEEE")
     print(self:GetSize_X())
     self.wall_size = Vector(self:GetSize_X(),self:GetSize_Y(),0 )
+    self.thickness = self:GetThickness()
     self.Mins = Vector( -1, -1, -1 )
     self.Maxs = Vector(  self.wall_size.x,  16,  self.wall_size.y )
     self.tri_calc_state = {state=0,clips={}, polygons={}, p_i=1,outpol = {}, positions={},polyconnect={},seg1 = {}, seg2 = {}}
     self.PolygonHoles = {}
     self.floatingPolygons = {}
+    
     if not CLIENT then
         util.AddNetworkString( "WallHit"..self:EntIndex() )
         self.physicsdata = nil
@@ -746,6 +762,24 @@ function ENT:Initialize()
             self:GetPhysicsObject():SetMass(50000)  // make sure to call these on client or else when you touch it, you will crash
             self:GetPhysicsObject():SetPos(self:GetPos())
         end
+
+        local holepoly = { regions = {{{-5,-5}, {5,-5},{6,0}, {5,5}, {0,6}, {-5,5},{-7,2}}},reverse ={false} }
+        for i = 1, #holepoly.regions do
+            for j = 1, #holepoly.regions[i] do
+                holepoly.regions[i][j][1] = holepoly.regions[i][j][1]*0.8
+                holepoly.regions[i][j][2] = holepoly.regions[i][j][2]*0.8
+            end
+        end
+        local holepolypositions = {}
+        self:triangulatePolygon(holepoly.regions[1],holepolypositions)
+        local points_outer = calculateOuterPositions(holepoly, self.thickness)
+        self.holemesh = self:generateMeshFromPoints(holepolypositions, {})
+        self.holemesh_outer = self:generateMeshFromPoints({}, points_outer)
+        self.holeents = {}
+        self.holeents_outer = {}
+        self:CallOnRemove("removeFakeHoles", self.removeFakeHoles)
+        
+        --self:PushFakeHole(self:LocalToWorld(Vector(50,0,75)))
     end
     
 
@@ -755,11 +789,51 @@ function ENT:Initialize()
 	--self:GetPhysicsObject():EnableMotion( false )
 end
 
+function ENT:PushFakeHole(position)
+    
+    local holeent = ents.CreateClientside("fakehole")
+    holeent.RenderMesh = self.holemesh
+    holeent:SetPos(position)
+    holeent:SetAngles(self:GetAngles())
+    holeent:Spawn()
+    holeent:SetNoDraw(true)
+    --self:DeleteOnRemove( self.holeents )
+    table.insert(self.holeents, holeent)
+
+    local holeent_outer = ents.CreateClientside("fakehole")
+    holeent_outer.RenderMesh = self.holemesh_outer
+    holeent_outer:SetAngles(self:GetAngles())
+    holeent_outer.Material = self.Material
+    --self:LocalToWorld(Vector(25,0,50))
+    holeent_outer:SetPos(position)
+    
+    holeent_outer:Spawn()
+    holeent_outer:SetNoDraw(true)
+    table.insert(self.holeents_outer, holeent_outer)
+    --self:DeleteOnRemove( self.holeents )
+end
+
+function ENT:PopFakeHole()
+    if #self.holeents > 0 then
+        self.holeents[1]:Remove()
+        table.remove(self.holeents,1)
+        self.holeents_outer[1]:Remove()
+        table.remove(self.holeents_outer,1)
+    end
+end
+
+function ENT:removeFakeHoles()
+    for i=1, #self.holeents do
+        self.holeents[i]:Remove()
+        self.holeents_outer[i]:Remove()
+    end
+    
+end
 
 function ENT:CreateMesh()
     local out_polygon, positions = self:GetVerts()
     self.RenderPoly = out_polygon
-    points_outer = calculateOuterPositions(out_polygon)
+    points_outer = calculateOuterPositions(out_polygon, self.thickness)
     self:BuildMeshFromPositions(positions,points_outer)
 end
 
@@ -820,6 +894,8 @@ function ENT:UpdateMeshHit(localhitpos,holetype)
         table.insert(self.tri_calc_state.clips, clip)
         table.insert(self.tri_calc_state.clips, clip)
     else
+        
+        self:PushFakeHole(self:LocalToWorld(localhitpos+Vector(0,0,20)))
         table.insert(self.tri_calc_state.clips, clip)
         table.insert(self.tri_calc_state.clips, clip)
         --local out_polygon, positions = self:trianglePoly(subject, clip);
@@ -834,7 +910,7 @@ function ENT:extrude_apply_mesh(out_polygon, positions)
     self.RenderPoly = out_polygon
     
     if CLIENT then
-        points_outer = calculateOuterPositions(out_polygon)
+        points_outer = calculateOuterPositions(out_polygon, self.thickness)
         self:BuildMeshFromPositions(positions, points_outer)
     end
     --local positionsTriangles = {}
@@ -967,7 +1043,7 @@ function ENT:Think()
 end
 
 
-function calculateOuterPositions(out_polygon)
+function calculateOuterPositions(out_polygon, thick)
     points_outer = {}
     regions = out_polygon.regions
     reverse = out_polygon.reverse
@@ -980,7 +1056,7 @@ function calculateOuterPositions(out_polygon)
             local p1y = regions[i][j][2]
             local p2x = regions[i][jnext][1]
             local p2y = regions[i][jnext][2]
-            local thick = 5
+            --local thick = self.thickness
             
             if do_reverse then
                 
@@ -1024,6 +1100,7 @@ function ENT:BuildMeshFromPositions(positions,points_outer)
         Vector(  0, 0, 0.2 ),
         Vector( 0, 0,0 ),
     }
+    local thickness = self.thickness
     local mesh = mesh
     self.RenderMesh = Mesh(self.Material)
     
@@ -1066,9 +1143,9 @@ function ENT:BuildMeshFromPositions(positions,points_outer)
         local v0 = positions[i]
         local v1 = positions[i-1]
         local v2 = positions[i-2]
-        v0.y = 5
-        v1.y = 5
-        v2.y = 5
+        v0.y = thickness
+        v1.y = thickness
+        v2.y = thickness
 
         local tangentS, tangentT = CalculateTangents(v0, v1, v2)
         mesh.Position( v0*self.mdlScale)
@@ -1123,7 +1200,7 @@ function ENT:generateMeshFromPoints(positions,points_outer)
     }
     local mesh = mesh
     outputmesh = Mesh(self.Material)
-    
+    local thickness = self.thickness
 
     mesh.Begin(outputmesh, MATERIAL_TRIANGLES, math.floor(#positions/3)*2+math.floor(#points_outer/3))
 
@@ -1164,9 +1241,9 @@ function ENT:generateMeshFromPoints(positions,points_outer)
         local v1 = positions[i-1]
         local v2 = positions[i-2]
  
-        v0.y = 5
-        v1.y = 5
-        v2.y = 5
+        v0.y = thickness
+        v1.y = thickness
+        v2.y = thickness
 
         local tangentS, tangentT = CalculateTangents(v0, v1, v2)
         mesh.Position( v0)
