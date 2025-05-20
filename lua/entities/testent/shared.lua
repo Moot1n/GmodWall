@@ -25,10 +25,16 @@ function ENT:SetupDataTables()
 	self:NetworkVar( "Float", 0, "Size_X" )
 	self:NetworkVar( "Float", "Size_Y" )
     self:NetworkVar( "Float", "Thickness" )
+    self:NetworkVar( "Bool", "LeftCon" )
+    self:NetworkVar( "Bool", "RightCon" )
+    self:NetworkVar( "Bool", "TopCon" )
+    self:NetworkVar( "Bool", "BotCon" )
 end
 
 function ENT:GetVerts()
     local subject = { regions = {{{0,0}, {self.wall_size.x,0}, {self.wall_size.x,self.wall_size.y}, {0,self.wall_size.y}}}, inverted = false }
+    -- This polygon crashes the game
+    --subject = { regions = {{{1.713689,0.000000}, {1.835223,0.103837}, {2.333406,0.182047},{2.319680,0.000000}}}, inverted = false }
     local clip = { regions = {{{590,590}, {600,590}, {600,610}, {50,610}}},inverted = false }
     return self:trianglePoly(subject, clip);
 end
@@ -496,7 +502,7 @@ function ENT:trianglePoly(subject, clip)
         
         -- Get hole regions
         self.PolygonHoles = {}
-        if not is_outer_region_floating(polygons[p_i][1], self.wall_size) then 
+        if not is_outer_region_floating(polygons[p_i][1], self.wall_size,self.leftcon,self.rightcon,self.topcon,self.botcon) then 
             
             local polyconnect,holes = self:connectPolygonHoles(polygons, p_i, outpol)
             table.insert(self.PolygonHoles, holes)
@@ -518,21 +524,21 @@ function ENT:trianglePolyState(InputState)
         
         local subject = self.RenderPoly
         local clip = InputState.clips[1]
-        print("STATE = ", state)
+        --print("STATE = ", state)
         --print("PI ",#clip)
         
         InputState.state = 1
         --polygons = self:intersectPolygons(subject, clip)
-        print("time to stage1")
+        --print("time to stage1")
         local st =os.clock()
         local seg1,seg2 = intersectPolygonsStage1(subject, clip)
         InputState.seg1 = seg1
         InputState.seg2 = seg2
         local et = os.clock()
-        print((et-st)*1000)
-        print("tabllelen = ", #InputState.clips)
+        --print((et-st)*1000)
+        --print("tabllelen = ", #InputState.clips)
         table.remove(InputState.clips,1)
-        print("tabllelen = ", #InputState.clips)
+        --print("tabllelen = ", #InputState.clips)
         InputState.state = 1
         
         return
@@ -541,12 +547,12 @@ function ENT:trianglePolyState(InputState)
 
     if InputState.state == 1 then
         
-        print("STATE = ", 1)
-        print("time to stage2")
-        st =os.clock()
+        --print("STATE = ", 1)
+        --print("time to stage2")
+        --st =os.clock()
         local polygons = intersectPolygonsStage2(InputState.seg1,InputState.seg2)
-        et = os.clock()
-        print((et-st)*1000)
+        --et = os.clock()
+        --print((et-st)*1000)
         InputState.polygons = polygons
         InputState.p_i = 1
         InputState.outpol = {regions={}, reverse={}}
@@ -555,7 +561,7 @@ function ENT:trianglePolyState(InputState)
         return
     end
     if state == 2 then
-        //print("STATE = ", state)
+        --print("STATE = ", state)
         InputState.state = 0
         local outpol = InputState.outpol
         local polygons = InputState.polygons
@@ -566,7 +572,7 @@ function ENT:trianglePolyState(InputState)
             -- Get hole regions
             self.PolygonHoles={}
             
-            if not is_outer_region_floating(polygons[p_i][1], self.wall_size) then 
+            if not is_outer_region_floating(polygons[p_i][1], self.wall_size,self.leftcon,self.rightcon,self.topcon,self.botcon) then 
                 
                 local polyconnect,holes = self:connectPolygonHoles(polygons, p_i, outpol)
                 table.insert(self.PolygonHoles, holes)
@@ -581,20 +587,21 @@ function ENT:trianglePolyState(InputState)
                     local floatingmesh = self:generateMeshFromPoints(floatingpositions, points_outer)
                     local ents = ents
                     local c_Model2 = ents.CreateClientside("coltest")
-                    
-                    local floaterpos = self:GetPos()
-                    floaterpos.z = floaterpos.z+20
-                    //print("GETPOS")
-                    //print(self:GetPos())
-                    // print(c_Model2:GetPos())
-                    c_Model2.Material = self.Material
-                    c_Model2:Spawn()
+                    if IsValid(c_Model2) then 
+                        local floaterpos = self:GetPos()
+                        floaterpos.z = floaterpos.z+20
+                        //print("GETPOS")
+                        //print(self:GetPos())
+                        // print(c_Model2:GetPos())
+                        c_Model2.Material = self.Material
+                        c_Model2:Spawn()
 
-                    c_Model2.RenderMesh = floatingmesh
-                    c_Model2:SetMaterial(self:GetMaterial())
-                    c_Model2:SetColor(self:GetColor())
-                    c_Model2.Pos= floaterpos
-                    c_Model2:SetAngles(self:GetAngles())
+                        c_Model2.RenderMesh = floatingmesh
+                        c_Model2:SetMaterial(self:GetMaterial())
+                        c_Model2:SetColor(self:GetColor())
+                        c_Model2.Pos= floaterpos
+                        c_Model2:SetAngles(self:GetAngles())
+                    end
                     --c_Model2:SetRenderOrigin( Vector(wall_size.x,0,wall_size.y ))
                     --c_Model2:SetRenderOrigin( floaterpos)
                 end
@@ -605,25 +612,28 @@ function ENT:trianglePolyState(InputState)
         return
     end
     if state == 3 then
-        //print("STATE = ", state)
+        --print("STATE = ", state)
         InputState.state = 0
         --if SERVER then
         --    if #InputState.clips > 1 then self.RenderPoly = InputState.outpol return end
         --end
         
-        self:extrude_apply_mesh(InputState.outpol, InputState.positions)
+        local alive = self:extrude_apply_mesh(InputState.outpol, InputState.positions)
         if CLIENT then
             if #InputState.clips <= #self.holeents then
                 self:PopFakeHole()
-            end 
+            end  
+        --else
+            --if not alive then self:Remove() end         
         end
+        
     end
 end
 
-function is_outer_region_floating(region,wall_size)
+function is_outer_region_floating(region,wall_size,lc,rc,tc,bc)
     local floating = true
     for i = 1, #region do
-        if region[i][1] == 0 or region[i][1] == wall_size.x or region[i][2] == 0 or region[i][2] == wall_size.y then
+        if (region[i][1] == 0 and lc) or (region[i][1] == wall_size.x and rc) or (region[i][2] == 0 and bc) or (region[i][2] == wall_size.y and tc) then
             floating = false
         end
     end
@@ -632,9 +642,13 @@ end
 
 function ENT:GetVertsPhys()
     local out_polygon, positions = self:GetVerts()
+    --print("Gertvertphys")
     for i = 1, #positions do
-        positions[i] = positions[i]*self.mdlScale
+        
+        positions[i] = positions[i] + Vector(0,4,0)
+        --print(positions[i])
     end
+    --print("ENDgetvertphys")
     self.PhysicsPoly = out_polygon
     self.RenderPoly = out_polygon
     return positions
@@ -712,6 +726,16 @@ function ENT:Initialize()
     print(self:GetSize_X())
     self.wall_size = Vector(self:GetSize_X(),self:GetSize_Y(),0 )
     self.thickness = self:GetThickness()
+    self.leftcon = self:GetLeftCon()
+    self.rightcon = self:GetRightCon()
+    self.topcon = self:GetTopCon()
+    self.botcon = self:GetBotCon()
+    if (not self.leftcon) and (not self.rightcon) and (not self.topcon) and (not self.botcon) then
+        self.botcon = true
+        --self.topcon = true
+        --self.leftcon = true
+        --self.rightcon = true
+    end
     self.Mins = Vector( -1, -1, -1 )
     self.Maxs = Vector(  self.wall_size.x,  16,  self.wall_size.y )
     self.tri_calc_state = {state=0,clips={}, polygons={}, p_i=1,outpol = {}, positions={},polyconnect={},seg1 = {}, seg2 = {}}
@@ -775,11 +799,18 @@ function ENT:Initialize()
         
 
         self.holeents = {}
-        self.holeents_outer = {}
         self:CallOnRemove("removeFakeHoles", self.removeFakeHoles)
         
         self.gibmeshes = {}
         self:BuildGibMeshes()
+
+
+        --[[ print(check_for_degenerate_triangles({Vector(1.713689, 4.000000, 0.000000), 
+                                              Vector(1.835223, 4.000000, 0.103837),
+                                              Vector(2.333406, 4.000000, 0.182047),
+                                              Vector(1.713689, 4.000000, 0.000000),
+                                              Vector(2.333406, 4.000000, 0.182047),
+                                              Vector(2.319680, 4.000000, 0.000000)})) ]]
     end
     
 
@@ -822,6 +853,7 @@ end
 function ENT:PushFakeHole(position,holetype,localhitpos)
     local idx = holetype+1
     local holeent = ents.CreateClientside("fakehole")
+    if not IsValid(holeent) then return false end
     holeent.RenderMesh = self.holemesh[idx]
     holeent:SetPos(position)
     local ang = Vector(0,0,0)
@@ -834,7 +866,8 @@ function ENT:PushFakeHole(position,holetype,localhitpos)
     --self:DeleteOnRemove( self.holeents )
     table.insert(self.holeents, holeent)
 
-    local holeent_outer = ents.CreateClientside("fakehole")
+    --[[ local holeent_outer = ents.CreateClientside("fakehole")
+    if not IsValid(holeent_outer) then return false end
     holeent_outer.RenderMesh = self.holemesh_outer[idx]
     holeent_outer:SetAngles(self:GetAngles())
     holeent_outer.Material = self.Material
@@ -843,7 +876,7 @@ function ENT:PushFakeHole(position,holetype,localhitpos)
     
     holeent_outer:Spawn()
     holeent_outer:SetNoDraw(true)
-    table.insert(self.holeents_outer, holeent_outer)
+    table.insert(self.holeents_outer, holeent_outer) ]]
     --self:DeleteOnRemove( self.holeents )
 end
 
@@ -851,15 +884,16 @@ function ENT:PopFakeHole()
     if #self.holeents > 0 then
         self.holeents[1]:Remove()
         table.remove(self.holeents,1)
-        self.holeents_outer[1]:Remove()
-        table.remove(self.holeents_outer,1)
+        --[[ self.holeents_outer[1]:Remove()
+        table.remove(self.holeents_outer,1) ]]
     end
 end
 
 function ENT:removeFakeHoles()
     for i=1, #self.holeents do
         self.holeents[i]:Remove()
-        self.holeents_outer[i]:Remove()
+        self.holeents = {}
+        --[[ self.holeents_outer[i]:Remove() ]]
     end
     
 end
@@ -926,7 +960,7 @@ function ENT:SpawnGibAtPos(localhitpos, type)
     local floatingmesh = self.gibmeshes[type+1]
     local ents = ents
     local c_Model2 = ents.CreateClientside("coltest")
-    
+    if not IsValid(c_Model2) then return false end
     local floaterpos = self:GetPos()
     floaterpos.z = floaterpos.z+20
 
@@ -985,11 +1019,24 @@ function get_polygon_from_holetype(holetype, localhitpos, rotate)
 end
 
 function ENT:extrude_apply_mesh(out_polygon, positions)
+    if #positions == 0 || #out_polygon.regions == 0 then 
+        if CLIENT then return end
+        self:Remove() 
+        return true
+    end 
+    -- VERY IMPORTANT! If there is invalid triangles then the game will crash on ENT:PhysicsFromMesh
+    if check_for_degenerate_triangles(positions) then
+        print("DEGENERATE DETECTED")
+        if CLIENT then return end
+        self:Remove() 
+        return true
+    end
     self.RenderPoly = out_polygon
     
     if CLIENT then
         points_outer = calculateOuterPositions(out_polygon, self.thickness)
         self:BuildMeshFromPositions(positions, points_outer)
+        --print("survived buildmeshfrom")
     end
     --local positionsTriangles = {}
     --for i = 1, #positions-3, 3 do
@@ -998,20 +1045,51 @@ function ENT:extrude_apply_mesh(out_polygon, positions)
     --end
 
     self:PhysicsDestroy()
+    print("CREATE PHYSICS FROM MESH")
+ --[[    for i = 1, #positions do
+        print(positions[i])
+        
+    end ]]
     self:PhysicsFromMesh( positions )
+    print("survived CREATE PHYSICS FROM MESH")
     self:SetSolid( SOLID_VPHYSICS ) -- Makes the Entity solid, allowing for collisions.
     self:SetMoveType( MOVETYPE_NONE ) -- Sets how the Entity moves, using physics.
 
-    if #positions == 0 then 
-        if CLIENT then return end
-        self:Remove() 
-        return
-    end
+    
     self:EnableCustomCollisions(true)
     self:GetPhysicsObject():EnableMotion(false)
     self:GetPhysicsObject():SetMass(50000)
     self:DrawShadow(false)
+    return true
+end
 
+-- VERY IMPORTANT! If there is invalid triangles then the game will crash on ENT:PhysicsFromMesh
+-- Disallow meshes with only two triangles that both have a volume of less than 1
+-- Disallow meshes with only degenerate triangles
+function check_for_degenerate_triangles(positions)
+    print("CHECKING DEGENERATE")
+    local twotriangles =  #positions == 6
+    for i = 1, #positions,3 do
+        local v0 = positions[i]
+        local v1 = positions[i+1]
+        local v2 = positions[i+2]
+        if isValidTriangle(v0, v1, v2) then 
+            return false
+        end
+    end
+    return true
+end
+
+function isValidTriangle(v1, v2, v3, twotriangles)
+    if v1 == v2 or v2 == v3 or v3 == v1 then return false end
+    local edge1 = v2 - v1
+    local edge2 = v3 - v1
+    --print(edge1:Cross(edge2):LengthSqr())
+    if twotriangles then
+        return edge1:Cross(edge2):LengthSqr() > 0.1
+    else
+        return edge1:Cross(edge2):LengthSqr() > 1
+    end
 end
 
 function dump(o)

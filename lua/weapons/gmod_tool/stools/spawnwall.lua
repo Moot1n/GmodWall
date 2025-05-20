@@ -10,6 +10,11 @@ TOOL.ClientConVar[ "thickness" ] = "4"
 TOOL.ClientConVar[ "gridsnap" ] = "4"
 TOOL.ClientConVar[ "rotsnap" ] = "45"
 
+TOOL.ClientConVar[ "leftcon" ] = "1"
+TOOL.ClientConVar[ "rightcon" ] = "1"
+TOOL.ClientConVar[ "topcon" ] = "1"
+TOOL.ClientConVar[ "botcon" ] = "1"
+
 TOOL.Information = { { name = "left" } }
 
 if CLIENT then
@@ -32,6 +37,10 @@ function TOOL:LeftClick(trace)
     local size_x = math.Clamp(math.floor(self:GetClientNumber( "size_x" )),0,256)
     local size_y = math.Clamp(math.floor(self:GetClientNumber( "size_y" )),0,256)
     local thickness = math.floor(self:GetClientNumber( "thickness" ))
+    if self:GetClientNumber( "leftcon" ) == 1 then ent.leftcon = true else ent.leftcon = false end
+    if self:GetClientNumber( "rightcon" ) == 1 then ent.rightcon = true else ent.rightcon = false end
+    if self:GetClientNumber( "topcon" ) == 1 then ent.topcon = true else ent.topcon = false end
+    if self:GetClientNumber( "botcon" ) == 1 then ent.botcon = true else ent.botcon = false end
     ent:SetSize_X(size_x)
     ent:SetSize_Y(size_y)
     ent:SetThickness(thickness)
@@ -98,4 +107,8 @@ function TOOL.BuildCPanel( CPanel )
     CPanel:NumSlider( "#tool.spawnbox.thickness", "spawnwall_thickness", 0, 16 )
     CPanel:NumSlider( "#tool.spawnbox.gridsnap", "spawnwall_gridsnap", 0, 128 )
     CPanel:NumSlider( "#tool.spawnbox.rotsnap", "spawnwall_rotsnap", 0, 128 )
+    CPanel:CheckBox("left connected", "spawnwall_leftcon")
+    CPanel:CheckBox("right connected", "spawnwall_rightcon")
+    CPanel:CheckBox("top connected", "spawnwall_topcon")
+    CPanel:CheckBox("bottom connected", "spawnwall_botcon")
 end
