@@ -11,6 +11,7 @@ ENT.Purpose = "To test the creation of entities." -- The purpose of this Entity.
 ENT.Spawnable = true -- Specifies whether this Entity can be spawned by players in the spawn menu.
 ENT.Material = Material( "phoenix_storms/gear" )
 ENT.RenderMesh = nil
+ENT.lifetime = 3
 local gravity = Vector(0, 0, -600)
 
 -- This is a common technique for ensuring nothing below this line is executed on the Server
@@ -20,7 +21,7 @@ if not CLIENT then return end
 function ENT:Initialize()
 	self:SetModel("models/Combine_Helicopter/helicopter_bomb01.mdl")
     self:SetNoDraw(false)
-
+    self.AngVel = Angle(0,0,0)
     self.Pos = self:GetPos()
     self.Vel = VectorRand() * 50 -- initial velocity
 	self.spawntime = os.clock()
@@ -31,7 +32,7 @@ end
 
 function ENT:Think()
 	
-	if os.clock() - self.spawntime > 3 then
+	if os.clock() - self.spawntime > self.lifetime then
 		self:Remove()
 	end
 	
@@ -44,6 +45,7 @@ function ENT:Think()
     self.Pos = self.Pos + self.Vel * dt
 	--self.Pos = self.Pos+Vector(1,0,0)
     -- Set the render origin
+    self:SetAngles(self:GetAngles()+self.AngVel*dt)
     self:SetPos(self.Pos)
 	--self:SetRenderOrigin( self.Pos)
     self:NextThink(CurTime())

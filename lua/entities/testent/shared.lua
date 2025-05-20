@@ -589,8 +589,9 @@ function ENT:trianglePolyState(InputState)
                     // print(c_Model2:GetPos())
                     c_Model2.Material = self.Material
                     c_Model2:Spawn()
+
                     c_Model2.RenderMesh = floatingmesh
-                    
+                    c_Model2:SetMaterial(self:GetMaterial())
                     c_Model2:SetColor(self:GetColor())
                     c_Model2.Pos= floaterpos
                     c_Model2:SetAngles(self:GetAngles())
@@ -762,24 +763,23 @@ function ENT:Initialize()
             self:GetPhysicsObject():SetMass(50000)  // make sure to call these on client or else when you touch it, you will crash
             self:GetPhysicsObject():SetPos(self:GetPos())
         end
-
-        local holepoly = { regions = {{{-5,-5}, {5,-5},{6,0}, {5,5}, {0,6}, {-5,5},{-7,2}}},reverse ={false} }
-        for i = 1, #holepoly.regions do
-            for j = 1, #holepoly.regions[i] do
-                holepoly.regions[i][j][1] = holepoly.regions[i][j][1]*0.8
-                holepoly.regions[i][j][2] = holepoly.regions[i][j][2]*0.8
-            end
+        self.holemesh = {}
+        self.holemesh_outer = {}
+        --local holepoly = { regions = {{{-5,-5}, {5,-5},{6,0}, {5,5}, {0,6}, {-5,5},{-7,2}}},reverse ={false} }
+        for i = 0, 6 do
+            local hmesh0, hmesh_outer0 = self:BuildFakeHoleMeshes(i)
+            table.insert(self.holemesh,hmesh0)
+            table.insert(self.holemesh_outer,hmesh_outer0)
         end
-        local holepolypositions = {}
-        self:triangulatePolygon(holepoly.regions[1],holepolypositions)
-        local points_outer = calculateOuterPositions(holepoly, self.thickness)
-        self.holemesh = self:generateMeshFromPoints(holepolypositions, {})
-        self.holemesh_outer = self:generateMeshFromPoints({}, points_outer)
+        
+        
+
         self.holeents = {}
         self.holeents_outer = {}
         self:CallOnRemove("removeFakeHoles", self.removeFakeHoles)
         
-        --self:PushFakeHole(self:LocalToWorld(Vector(50,0,75)))
+        self.gibmeshes = {}
+        self:BuildGibMeshes()
     end
     
 
@@ -789,19 +789,53 @@ function ENT:Initialize()
 	--self:GetPhysicsObject():EnableMotion( false )
 end
 
-function ENT:PushFakeHole(position)
-    
+function ENT:BuildFakeHoleMeshes(holetype)
+--[[     for i = 1, #holepoly.regions do
+        for j = 1, #holepoly.regions[i] do
+            holepoly.regions[i][j][1] = holepoly.regions[i][j][1]*holesize
+            holepoly.regions[i][j][2] = holepoly.regions[i][j][2]*holesize*holesizey
+        end
+    end ]]
+    local holepoly = get_polygon_from_holetype(holetype, Vector(0,0,20), false)
+    local holepolypositions = {}
+    self:triangulatePolygon(holepoly.regions[1],holepolypositions)
+    local points_outer = calculateOuterPositions(holepoly, self.thickness)
+    hmesh = self:generateMeshFromPoints(holepolypositions, {})
+    hmesh_outer = self:generateMeshFromPoints({}, points_outer)
+    return hmesh, hmesh_outer
+end
+
+function ENT:BuildGibMeshes()
+    for i = 0, 6 do
+        local gibpoly = get_polygon_from_holetype(i, Vector(0,0,20), false)
+        local gibpolypositions = {}
+        self:triangulatePolygon(gibpoly.regions[1],gibpolypositions)
+        --local points_outer = calculateOuterPositions(gibpoly, self.thickness)
+        local actualthickness = self.thickness
+        self.thickness = 0
+        gibmesh = self:generateMeshFromPoints(gibpolypositions,{})
+        self.thickness = actualthickness
+        table.insert(self.gibmeshes,gibmesh)
+    end
+end
+
+function ENT:PushFakeHole(position,holetype,localhitpos)
+    local idx = holetype+1
     local holeent = ents.CreateClientside("fakehole")
-    holeent.RenderMesh = self.holemesh
+    holeent.RenderMesh = self.holemesh[idx]
     holeent:SetPos(position)
-    holeent:SetAngles(self:GetAngles())
+    local ang = Vector(0,0,0)
+    if (holetype~=5 && holetype ~=6) then
+        ang = math.deg(localhitpos.x*100+localhitpos.z*100)
+    end
+    holeent:SetAngles(self:GetAngles()+Angle(ang,0,0))
     holeent:Spawn()
     holeent:SetNoDraw(true)
     --self:DeleteOnRemove( self.holeents )
     table.insert(self.holeents, holeent)
 
     local holeent_outer = ents.CreateClientside("fakehole")
-    holeent_outer.RenderMesh = self.holemesh_outer
+    holeent_outer.RenderMesh = self.holemesh_outer[idx]
     holeent_outer:SetAngles(self:GetAngles())
     holeent_outer.Material = self.Material
     --self:LocalToWorld(Vector(25,0,50))
@@ -856,19 +890,72 @@ function count_nearby_points(point,polygon,radius,max)
 end
 
 function ENT:UpdateMeshHit(localhitpos,holetype)
+    
+    local subject = self.RenderPoly
+    local clip = get_polygon_from_holetype(holetype,localhitpos,true)
+    if SERVER then
+        --local out_polygon, positions = self:trianglePoly(subject, clip);
+        --self:extrude_apply_mesh(out_polygon, positions)
+        table.insert(self.tri_calc_state.clips, clip)
+        table.insert(self.tri_calc_state.clips, clip)
+    else
+        if holetype == 1 || holetype == 2 || holetype == 0 then
+            self:SpawnGibAtPos(localhitpos,0)
+        elseif holetype == 3 then
+            self:SpawnGibAtPos(localhitpos,0)
+            self:SpawnGibAtPos(localhitpos,1)
+            self:SpawnGibAtPos(localhitpos,0)
+        elseif holetype == 4 then 
+            self:SpawnGibAtPos(localhitpos,0)
+            self:SpawnGibAtPos(localhitpos,1)
+            self:SpawnGibAtPos(localhitpos,0)
+            self:SpawnGibAtPos(localhitpos,0)
+        end
+        self:PushFakeHole(self:LocalToWorld(localhitpos), holetype,localhitpos)
+        table.insert(self.tri_calc_state.clips, clip)
+        table.insert(self.tri_calc_state.clips, clip)
+        --local out_polygon, positions = self:trianglePoly(subject, clip);
+        --local starttime = os.clock()
+        --self:extrude_apply_mesh(out_polygon, positions)
+        --print("Extruda Apply mesh time")
+        --print((os.clock()-starttime)*1000)
+    end
+end
+
+function ENT:SpawnGibAtPos(localhitpos, type)
+    local floatingmesh = self.gibmeshes[type+1]
+    local ents = ents
+    local c_Model2 = ents.CreateClientside("coltest")
+    
+    local floaterpos = self:GetPos()
+    floaterpos.z = floaterpos.z+20
+
+    c_Model2.Material = self.Material
+    c_Model2:Spawn()
+
+    c_Model2.RenderMesh = floatingmesh
+    c_Model2:SetMaterial(self:GetMaterial())
+    c_Model2:SetColor(self:GetColor())
+    c_Model2.Pos= self:LocalToWorld(localhitpos)
+    c_Model2.lifetime = 0.3
+    c_Model2.Vel = VectorRand() * 200
+    c_Model2.AngVel = AngleRand()
+    c_Model2:SetAngles(self:GetAngles())
+end
+
+function get_polygon_from_holetype(holetype, localhitpos, rotate)
+    local clip = { regions = {{{-5,-5}, {2.5,-6}, {5,-5},{6,0}, {5,5}, {0,6}, {-5,5},{-7,2},{-7,0}}},inverted =false, reverse={false} }
     local holesize = 0.8
     local holesizey = 1
-    local subject = self.RenderPoly
-    local clip = { regions = {{{-5,-5}, {2.5,-6}, {5,-5},{6,0}, {5,5}, {0,6}, {-5,5},{-7,2},{-7,0}}},inverted =false }
     if holetype == 0 then
         
-        clip = { regions = {{{-5,-5}, {5,-5},{6,0}, {5,5}, {0,6}, {-5,5},{-7,2}}},inverted =false }
+        clip = { regions = {{{-5,-5}, {5,-5},{6,0}, {5,5}, {0,6}, {-5,5},{-7,2}}},inverted =false,reverse={false} }
         --clip = { regions = {{{-5,-5}, {5,-5}, {5,5}, {-5,5}}},inverted =false }
     elseif holetype == 1 then
-        clip = { regions = {{{-5,-5}, {5,-5},{6,0}, {5,5}, {0,6}, {-5,5},{-7,2}}},inverted =false }
+        clip = { regions = {{{-5,-5}, {5,-5},{6,0}, {5,5}, {0,6}, {-5,5},{-7,2}}},inverted =false,reverse={false} }
         holesize = 1.2
     elseif holetype == 2 then
-        clip = { regions = {{{-5,-5}, {5,-5},{6,0}, {5,5}, {0,6}, {-5,5},{-7,2}}},inverted =false }
+        clip = { regions = {{{-5,-5}, {5,-5},{6,0}, {5,5}, {0,6}, {-5,5},{-7,2}}},inverted =false,reverse={false} }
         holesize = 2
     elseif holetype == 3 then
         holesize = 3
@@ -884,26 +971,17 @@ function ENT:UpdateMeshHit(localhitpos,holetype)
     --local clip = { regions = {{{-5,-5}, {5,-5}, {5,5}, {-5,5}}},inverted =false }
     for i = 1, #clip.regions do
         for j = 1, #clip.regions[i] do
+            if rotate && (holetype~=5 && holetype ~=6) then
+                local px = clip.regions[i][j][1]
+                local ang = localhitpos.x*100+localhitpos.z*100
+                clip.regions[i][j][1] = clip.regions[i][j][1]*math.cos(ang)+clip.regions[i][j][2]*math.sin(ang)
+                clip.regions[i][j][2] = -px*math.sin(ang)+clip.regions[i][j][2]*math.cos(ang)
+            end
             clip.regions[i][j][1] = localhitpos[1] + clip.regions[i][j][1]*holesize
             clip.regions[i][j][2] = localhitpos[3] + clip.regions[i][j][2]*holesize*holesizey
         end
     end
-    if SERVER then
-        --local out_polygon, positions = self:trianglePoly(subject, clip);
-        --self:extrude_apply_mesh(out_polygon, positions)
-        table.insert(self.tri_calc_state.clips, clip)
-        table.insert(self.tri_calc_state.clips, clip)
-    else
-        
-        self:PushFakeHole(self:LocalToWorld(localhitpos+Vector(0,0,20)))
-        table.insert(self.tri_calc_state.clips, clip)
-        table.insert(self.tri_calc_state.clips, clip)
-        --local out_polygon, positions = self:trianglePoly(subject, clip);
-        --local starttime = os.clock()
-        --self:extrude_apply_mesh(out_polygon, positions)
-        --print("Extruda Apply mesh time")
-        --print((os.clock()-starttime)*1000)
-    end
+    return clip
 end
 
 function ENT:extrude_apply_mesh(out_polygon, positions)
@@ -978,8 +1056,6 @@ function ENT:Think()
                 local mass = self.physicsdata.colData.HitObject:GetMass()
                 local speed = self.physicsdata.colData.Speed
                 local momentum = mass*speed
-                print("MOMENTUM MOMENMTUM")
-                print(momentum)
                 if momentum < 1000 then
                     self.physicsdata = nil
                     return 
@@ -995,6 +1071,7 @@ function ENT:Think()
                     normal:Rotate(self:GetAngles())
                     local ballvel = self.physicsdata.colData.TheirOldVelocity
                     local reflect = ballvel - 2*(ballvel:Dot(normal))*normal
+                    
                     self.physicsdata.colData.HitObject:SetVelocity(reflect)
                     holetype = 3
                 end
