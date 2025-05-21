@@ -9,7 +9,7 @@ local epsilon = Epsilon()
 ENT.Type = "anim" -- Sets the Entity type to 'anim', indicating it's an animated Entity.
 ENT.Base = "base_gmodentity" -- Specifies that this Entity is based on the 'base_gmodentity', inheriting its functionality.
 ENT.PrintName = "Test Entity" -- The name that will appear in the spawn menu.
-ENT.Author = "YourName" -- The author's name for this Entity.
+ENT.Author = "Moot1n" -- The author's name for this Entity.
 ENT.Category = "Test entities" -- The category for this Entity in the spawn menu.
 ENT.Contact = "STEAM_0:1:12345678" -- The contact details for the author of this Entity.
 ENT.Purpose = "To test the creation of entities." -- The purpose of this Entity.
@@ -19,8 +19,50 @@ ENT.wall_size = Vector(128,128,0)
 ENT.Mins = Vector( -1, -1, -1 )
 ENT.Maxs = Vector(  ENT.wall_size.x,  16,  ENT.wall_size.y )
 ENT.mdlScale = 1
+ENT.texturescale = 1/128
 ENT.Material = Material( "phoenix_storms/gear" )
+if CLIENT then
+    ENT.material_plaster1 = CreateMaterial("breakmat_plaster1", "VertexLitGeneric", {
+                ["$basetexture"] = "plaster/plasterwall016a",
+                ["$surfaceprop"] = "plaster",
+                ["$model"] = "0",
+                ["$flat"] = "1",
+                ["$nocull"] = "0",
+            })
+    ENT.material_plaster2 = CreateMaterial("breakmat_plaster2", "VertexLitGeneric", {
 
+                ["$basetexture"] = "plaster/plasterwall005c",
+                ["$surfaceprop"] = "plaster",
+                ["$model"] = "0",
+                ["$flat"] = "1",
+                ["$nocull"] = "0",
+            })
+    ENT.material_woodcrate = CreateMaterial("breakmat_woodcrate", "VertexLitGeneric", {
+
+                ["$basetexture"] = "props/woodcrate001a",
+                ["$basetexturetransform"] = "center .5 .5 scale 2 2 rotate 0 translate 0 0",
+                ["$surfaceprop"] = "wood_crate",
+                ["$model"] = "0",
+                ["$flat"] = "1",
+                ["$nocull"] = "0",
+            })
+    ENT.material_woodfloor1 = CreateMaterial("breakmat_woodfloor1","VertexLitGeneric", {
+                ["$basetexture"] = "wood/woodfloor005a",
+                ["$basetexturetransform"] = "center .5 .5 scale 2 2 rotate 0 translate 0 0",
+                ["$surfaceprop"] = "Wood_Panel",
+                ["$model"] = "0",
+                ["$flat"] = "1",
+                ["$nocull"] = "0",
+            })
+    ENT.material_woodfloor2 = CreateMaterial("breakmat_woodfloor2","VertexLitGeneric", {
+                ["$basetexture"] = "wood/woodfloor008a",
+                ["$basetexturetransform"] = "center .5 .5 scale 2 2 rotate 0 translate 0 0",
+                ["$surfaceprop"] = "Wood_Panel",
+                ["$model"] = "0",
+                ["$flat"] = "1",
+                ["$nocull"] = "0",
+            })
+end
 function ENT:SetupDataTables()
 	self:NetworkVar( "Float", 0, "Size_X" )
 	self:NetworkVar( "Float", "Size_Y" )
@@ -160,8 +202,6 @@ local function connectHoles2(outer, holes)
             -- print("AGAINST ("..seg[1][1]..", "..seg[1][2].."), ("..seg[2][1]..", "..seg[2][2]..")")
             
             if pointLeftOfSeg2(global_rightmost, seg) == true then
-                -- print("OK")
-                --print(i)
                 if leftmostseg == nil  then 
                     leftmostseg = seg 
                     leftmostsegidx = i
@@ -618,13 +658,11 @@ function ENT:trianglePolyState(InputState)
         --    if #InputState.clips > 1 then self.RenderPoly = InputState.outpol return end
         --end
         
-        local alive = self:extrude_apply_mesh(InputState.outpol, InputState.positions)
+        self:extrude_apply_mesh(InputState.outpol, InputState.positions)
         if CLIENT then
             if #InputState.clips <= #self.holeents then
                 self:PopFakeHole()
-            end  
-        --else
-            --if not alive then self:Remove() end         
+            end        
         end
         
     end
@@ -645,7 +683,7 @@ function ENT:GetVertsPhys()
     --print("Gertvertphys")
     for i = 1, #positions do
         
-        positions[i] = positions[i] + Vector(0,4,0)
+        positions[i] = positions[i] + Vector(0,self.thickness,0)
         --print(positions[i])
     end
     --print("ENDgetvertphys")
@@ -700,9 +738,9 @@ function ENT:OnTakeDamage(damage)
                 holetype =3
             end
         end
-        print("DAMAGEDAMAGE")
+       --[[  print("DAMAGEDAMAGE")
         print(sentHitPos)
-        print(damageAmount)
+        print(damageAmount) ]]
         self:UpdateMeshHit(sentHitPos,holetype)
         net.Start( "WallHit"..self:EntIndex() )
             net.WriteUInt(holetype, 4)
@@ -713,7 +751,6 @@ function ENT:OnTakeDamage(damage)
 end
 
 function ENT:PhysicsCollide( colData, collider )
-    print("TAKEDAMAGE")
     
     self.physicsdata = {colData = colData, collider = collider}
     
@@ -722,7 +759,7 @@ end
 function ENT:Initialize()
     --local wall_size = Vector(128,128,0)
     --trianglePoly()
-    print("SIZEEEE")
+
     print(self:GetSize_X())
     self.wall_size = Vector(self:GetSize_X(),self:GetSize_Y(),0 )
     self.thickness = self:GetThickness()
@@ -747,7 +784,7 @@ function ENT:Initialize()
         self.physicsdata = nil
     end
     if CLIENT then 
-        
+        self.Material = self.material_woodfloor2
         local WallHitReceived = function( lengthOfMessageReceived, playerWhoSentTheMessageToUs )
 		-- Note how we read them all in the same order as they are written:
         local holetype = net.ReadUInt(4)
@@ -764,7 +801,7 @@ function ENT:Initialize()
     if not CLIENT then
         
         --self:PhysicsInitConvex(GetVerts())
-        self:SetModel("models/props_c17/FurnitureCouch002a.mdl") -- Sets the model for the Entity.
+        --self:SetModel("models/Combine_Helicopter/helicopter_bomb01.mdl") -- Sets the model for the Entity.
         self:PhysicsDestroy()
         self:PhysicsFromMesh( self:GetVertsPhys() )
         self:SetSolid( SOLID_VPHYSICS ) -- Makes the Entity solid, allowing for collisions.
@@ -780,6 +817,9 @@ function ENT:Initialize()
     local current_polygons = {}
     if CLIENT then
         self:CreateMesh()
+        self:PhysicsFromMesh( self:GetVertsPhys() )
+        self:SetSolid( SOLID_VPHYSICS ) -- Makes the Entity solid, allowing for collisions.
+        self:SetMoveType( MOVETYPE_NONE )
         self:EnableCustomCollisions(true)
         self:SetRenderBounds( self.Mins, self.Maxs )
         if self:GetPhysicsObject():IsValid() then
@@ -813,7 +853,7 @@ function ENT:Initialize()
                                               Vector(2.319680, 4.000000, 0.000000)})) ]]
     end
     
-
+    self:SetKeyValue("damagefilter", "")
 	
     
    
@@ -1022,14 +1062,14 @@ function ENT:extrude_apply_mesh(out_polygon, positions)
     if #positions == 0 || #out_polygon.regions == 0 then 
         if CLIENT then return end
         self:Remove() 
-        return true
+        return
     end 
     -- VERY IMPORTANT! If there is invalid triangles then the game will crash on ENT:PhysicsFromMesh
     if check_for_degenerate_triangles(positions) then
-        print("DEGENERATE DETECTED")
+        --print("DEGENERATE DETECTED")
         if CLIENT then return end
         self:Remove() 
-        return true
+        return
     end
     self.RenderPoly = out_polygon
     
@@ -1043,15 +1083,18 @@ function ENT:extrude_apply_mesh(out_polygon, positions)
     --    local normVec = Vector(0,0,1)
     --    table.Add(positionsTriangles, {{pos =positions[i], normal = normVec},{pos=positions[i+1],normal = normVec},{pos=positions[i+2],normal = normVec}})
     --end
-
+    for i = 1, #positions do
+        
+        positions[i] = positions[i] + Vector(0,self.thickness,0)
+        --print(positions[i])
+    end
     self:PhysicsDestroy()
-    print("CREATE PHYSICS FROM MESH")
  --[[    for i = 1, #positions do
         print(positions[i])
         
     end ]]
     self:PhysicsFromMesh( positions )
-    print("survived CREATE PHYSICS FROM MESH")
+
     self:SetSolid( SOLID_VPHYSICS ) -- Makes the Entity solid, allowing for collisions.
     self:SetMoveType( MOVETYPE_NONE ) -- Sets how the Entity moves, using physics.
 
@@ -1060,7 +1103,7 @@ function ENT:extrude_apply_mesh(out_polygon, positions)
     self:GetPhysicsObject():EnableMotion(false)
     self:GetPhysicsObject():SetMass(50000)
     self:DrawShadow(false)
-    return true
+    return
 end
 
 -- VERY IMPORTANT! If there is invalid triangles then the game will crash on ENT:PhysicsFromMesh
@@ -1084,7 +1127,6 @@ function isValidTriangle(v1, v2, v3, twotriangles)
     if v1 == v2 or v2 == v3 or v3 == v1 then return false end
     local edge1 = v2 - v1
     local edge2 = v3 - v1
-    --print(edge1:Cross(edge2):LengthSqr())
     if twotriangles then
         return edge1:Cross(edge2):LengthSqr() > 0.1
     else
@@ -1109,10 +1151,7 @@ function ENT:Think()
     
     self:NextThink( CurTime()+0.01)
     if SERVER then
-        --print(self:GetPhysicsObject():GetPos())
-        --print(self:GetPhysicsObject():IsMotionEnabled())
         if self.physicsdata ~= nil then
-            print("AAAAAABBBB")
             --local mins, maxs = self.physicsdata.colData.HitObject:SetVelocity(self.physicsdata.colData.HitObject)
             -- Fix Combine Ball Relfection
             
@@ -1161,9 +1200,9 @@ function ENT:Think()
                 self.physicsdata = nil
                 return
             end
-            print("DAMAGEDAMAGE")
+            --[[ print("DAMAGEDAMAGE")
             print(sentHitPos)
-            print(damageAmount)
+            print(damageAmount) ]]
             self:UpdateMeshHit(sentHitPos,holetype)
             net.Start( "WallHit"..self:EntIndex() )
                 net.WriteUInt(holetype, 4)
@@ -1259,12 +1298,13 @@ function ENT:BuildMeshFromPositions(positions,points_outer)
     local mesh = mesh
     self.RenderMesh = Mesh(self.Material)
     
-    print("SUBJECT")
-    print( math.floor(#positions/3)*2+math.floor(#points_outer/3))
-    print(self.RenderPoly)
+    --print("SUBJECT")
+    --print( math.floor(#positions/3)*2+math.floor(#points_outer/3))
+    --print(self.RenderPoly)
     mesh.Begin(self.RenderMesh, MATERIAL_TRIANGLES, math.floor(#positions/3)*2+math.floor(#points_outer/3))
     local faceNorm = Vector(0,-1,0)
-    --faceNorm:Rotate(-self:GetAngles())
+    local faceNorm2 = Vector(0,1,0)
+    local uvscale = self.texturescale
     for i = 1, #positions-2,3 do
         
         
@@ -1274,21 +1314,21 @@ function ENT:BuildMeshFromPositions(positions,points_outer)
 
         local tangentS, tangentT = CalculateTangents(v0, v1, v2)
         mesh.Position( v0*self.mdlScale)
-        mesh.TexCoord( 0, v0.x/20, v0.z/20)
+        mesh.TexCoord( 0, v0.x*uvscale, -v0.z*uvscale )
         --mesh.TexCoord( 0, 0, 0)
-        mesh.Normal(Vector(0,-1,0))
+        mesh.Normal(faceNorm)
         mesh.AdvanceVertex()
 
         mesh.Position( v1*self.mdlScale)
-        mesh.TexCoord( 0, v1.x/20, v1.z/20)
+        mesh.TexCoord( 0, v1.x*uvscale, -v1.z*uvscale)
         --mesh.TexCoord( 0, 0, 20)
-        mesh.Normal(Vector(0,-1,0))
+        mesh.Normal(faceNorm)
         mesh.AdvanceVertex()
 
         mesh.Position( v2*self.mdlScale)
         --mesh.TexCoord( 0, 20, 0)
-        mesh.TexCoord( 0, v2.x/20, v2.z/20)
-        mesh.Normal(Vector(0,-1,0))
+        mesh.TexCoord( 0, v2.x*uvscale, -v2.z*uvscale)
+        mesh.Normal(faceNorm)
         mesh.AdvanceVertex()
 
     end
@@ -1304,21 +1344,21 @@ function ENT:BuildMeshFromPositions(positions,points_outer)
 
         local tangentS, tangentT = CalculateTangents(v0, v1, v2)
         mesh.Position( v0*self.mdlScale)
-        mesh.TexCoord( 0, v0.x/20, v0.z/20)
+        mesh.TexCoord( 0, v0.x*uvscale, -v0.z*uvscale)
         --mesh.TexCoord( 0, 0, 0)
-        mesh.Normal(Vector(0,1,0))
+        mesh.Normal(faceNorm2)
         mesh.AdvanceVertex()
 
         mesh.Position( v1*self.mdlScale)
-        mesh.TexCoord( 0, v1.x/20, v1.z/20)
+        mesh.TexCoord( 0, v1.x*uvscale, -v1.z*uvscale)
         --mesh.TexCoord( 0, 0, 20)
-        mesh.Normal(Vector(0,1,0))
+        mesh.Normal(faceNorm2)
         mesh.AdvanceVertex()
 
         mesh.Position( v2*self.mdlScale)
         --mesh.TexCoord( 0, 20, 0)
-        mesh.TexCoord( 0, v2.x/20, v2.z/20)
-        mesh.Normal(Vector(0,1,0))
+        mesh.TexCoord( 0, v2.x*uvscale, -v2.z*uvscale)
+        mesh.Normal(faceNorm2)
         mesh.AdvanceVertex()
     end
 
@@ -1327,17 +1367,17 @@ function ENT:BuildMeshFromPositions(positions,points_outer)
         local v1 = points_outer[i+1]
         local v2 = points_outer[i+2]
 
-        mesh.TexCoord( 0, texcoord[1].x,texcoord[1].y)
+        mesh.TexCoord( 0, v0.x*uvscale,v0.y*uvscale)
         mesh.Position( v0*self.mdlScale)
         mesh.Normal(Vector(0,0,1))
         mesh.AdvanceVertex()
 
-        mesh.TexCoord( 0, texcoord[2].x,texcoord[2].y)
+        mesh.TexCoord( 0, v1.x*uvscale,v1.y*uvscale)
         mesh.Position( v1*self.mdlScale)
         mesh.Normal(Vector(0,0,1))
         mesh.AdvanceVertex()
 
-        mesh.TexCoord( 0, texcoord[3].x,texcoord[3].y)
+        mesh.TexCoord( 0, v2.x*uvscale,v2.y*uvscale)
         mesh.Position( v2*self.mdlScale)
         mesh.Normal(Vector(0,0,1))
         mesh.AdvanceVertex()
@@ -1358,8 +1398,10 @@ function ENT:generateMeshFromPoints(positions,points_outer)
     local thickness = self.thickness
 
     mesh.Begin(outputmesh, MATERIAL_TRIANGLES, math.floor(#positions/3)*2+math.floor(#points_outer/3))
-
+    
     local faceNorm = Vector(0,-1,0)
+    local faceNorm2 = Vector(0,1,0)
+    local uvscale = self.texturescale
     for i = 1, #positions-2,3 do
         
         
@@ -1375,18 +1417,18 @@ function ENT:generateMeshFromPoints(positions,points_outer)
 
         local tangentS, tangentT = CalculateTangents(v0, v1, v2)
         mesh.Position( v0)
-        mesh.TexCoord( 0, v0.x/20, v0.z/20)
-        mesh.Normal(Vector(0,-1,0))
+        mesh.TexCoord( 0, v0.x*uvscale, -v0.z*uvscale+0.1)
+        mesh.Normal(faceNorm)
         mesh.AdvanceVertex()
 
         mesh.Position( v1)
-        mesh.TexCoord( 0, v1.x/20, v1.z/20)
-        mesh.Normal(Vector(0,-1,0))
+        mesh.TexCoord( 0, v1.x*uvscale, -v1.z*uvscale+0.1)
+        mesh.Normal(faceNorm)
         mesh.AdvanceVertex()
 
         mesh.Position( v2)
-        mesh.TexCoord( 0, v2.x/20, v2.z/20)
-        mesh.Normal(Vector(0,-1,0))
+        mesh.TexCoord( 0, v2.x*uvscale, -v2.z*uvscale+0.1)
+        mesh.Normal(faceNorm)
         mesh.AdvanceVertex()
 
     end
@@ -1402,18 +1444,18 @@ function ENT:generateMeshFromPoints(positions,points_outer)
 
         local tangentS, tangentT = CalculateTangents(v0, v1, v2)
         mesh.Position( v0)
-        mesh.TexCoord( 0, v0.x/20, v0.z/20)
-        mesh.Normal(Vector(0,1,0))
+        mesh.TexCoord( 0, v0.x*uvscale, -v0.z*uvscale+0.1)
+        mesh.Normal(faceNorm2)
         mesh.AdvanceVertex()
 
         mesh.Position( v1)
-        mesh.TexCoord( 0, v1.x/20, v1.z/20)
-        mesh.Normal(Vector(0,1,0))
+        mesh.TexCoord( 0, v1.x*uvscale, -v1.z*uvscale+0.1)
+        mesh.Normal(faceNorm2)
         mesh.AdvanceVertex()
 
         mesh.Position( v2)
-        mesh.TexCoord( 0, v2.x/20, v2.z/20)
-        mesh.Normal(Vector(0,1,0))
+        mesh.TexCoord( 0, v2.x*uvscale, -v2.z*uvscale+0.1)
+        mesh.Normal(faceNorm2)
         mesh.AdvanceVertex()
     end
 
@@ -1426,17 +1468,17 @@ function ENT:generateMeshFromPoints(positions,points_outer)
         v1.z=v1.z-20
         v2.z=v2.z-20
 
-        mesh.TexCoord( 0, texcoord[1].x,texcoord[1].y)
+        mesh.TexCoord( 0, texcoord[1].x,v0.y*uvscale)
         mesh.Position( v0)
         mesh.Normal(Vector(0,0,1))
         mesh.AdvanceVertex()
 
-        mesh.TexCoord( 0, texcoord[2].x,texcoord[2].y)
+        mesh.TexCoord( 0, texcoord[2].x,v1.y*uvscale)
         mesh.Position( v1)
         mesh.Normal(Vector(0,0,1))
         mesh.AdvanceVertex()
 
-        mesh.TexCoord( 0, texcoord[3].x,texcoord[3].y)
+        mesh.TexCoord( 0, texcoord[3].x,v2.y*uvscale)
         mesh.Position( v2)
         mesh.Normal(Vector(0,0,1))
         mesh.AdvanceVertex()

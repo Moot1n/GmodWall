@@ -1,4 +1,4 @@
-
+AddCSLuaFile()
 TOOL.Category = "Construction"
 TOOL.Name = "spawnwall"
 --TOOL.Command = nil
@@ -14,22 +14,20 @@ TOOL.ClientConVar[ "leftcon" ] = "1"
 TOOL.ClientConVar[ "rightcon" ] = "1"
 TOOL.ClientConVar[ "topcon" ] = "1"
 TOOL.ClientConVar[ "botcon" ] = "1"
-
+TOOL.ClientConVar[ "rotated"] = "1"
 TOOL.Information = { { name = "left" } }
-
 if CLIENT then
     language.Add("tool.spawnwall.name", "Spawn Box")
     language.Add("tool.spawnwall.desc", "Spawns a box where you are aiming.")
     language.Add("tool.spawnwall.0", "Left click to spawn a box.")
 end
-
 -- Left Click Function
 function TOOL:LeftClick(trace)
     if CLIENT then return true end
 
     local ply = self:GetOwner()
     if not IsValid(ply) then return false end
-
+    
     pos, angle = self:getBoxTransform(trace,ply)
     
     local ent = ents.Create("testent")
@@ -37,10 +35,10 @@ function TOOL:LeftClick(trace)
     local size_x = math.Clamp(math.floor(self:GetClientNumber( "size_x" )),0,256)
     local size_y = math.Clamp(math.floor(self:GetClientNumber( "size_y" )),0,256)
     local thickness = math.floor(self:GetClientNumber( "thickness" ))
-    if self:GetClientNumber( "leftcon" ) == 1 then ent.leftcon = true else ent.leftcon = false end
-    if self:GetClientNumber( "rightcon" ) == 1 then ent.rightcon = true else ent.rightcon = false end
-    if self:GetClientNumber( "topcon" ) == 1 then ent.topcon = true else ent.topcon = false end
-    if self:GetClientNumber( "botcon" ) == 1 then ent.botcon = true else ent.botcon = false end
+    if self:GetClientNumber( "leftcon" ) == 1 then ent:SetLeftCon(true) else ent:SetLeftCon(false) end
+    if self:GetClientNumber( "rightcon" ) == 1 then ent:SetRightCon(true) else ent:SetRightCon(false) end
+    if self:GetClientNumber( "topcon" ) == 1 then ent:SetTopCon(true) else ent:SetTopCon(false) end
+    if self:GetClientNumber( "botcon" ) == 1 then ent:SetBotCon(true) else ent:SetBotCon(false) end
     ent:SetSize_X(size_x)
     ent:SetSize_Y(size_y)
     ent:SetThickness(thickness)
@@ -59,6 +57,15 @@ function TOOL:LeftClick(trace)
     return true
 end
 
+function TOOL:RightClick( trace )
+	-- The SWEP doesn't reload so this does nothing :(
+    if self:GetClientNumber( "rotated" ) == 0 then
+        RunConsoleCommand("spawnwall_rotated", 1)
+    else
+        RunConsoleCommand("spawnwall_rotated", 0)
+    end
+end
+
 function TOOL:getBoxTransform(tr,ply)
     local pos = tr.HitPos
     local grid_snap = math.max(math.floor(self:GetClientNumber( "gridsnap" )),0)
@@ -74,6 +81,9 @@ function TOOL:getBoxTransform(tr,ply)
     rotangle.y = rotangle.y+90
     if math.abs(normal.z) <= 0.95 then
         rotangle = normal:Angle()
+    end
+    if self:GetClientNumber( "rotated" ) == 1 then
+        rotangle.z = rotangle.z+90
     end
     local rot_snap = math.max(math.floor(self:GetClientNumber( "rotsnap" )),0)
     if rot_snap ~= 0 then
