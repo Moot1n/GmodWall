@@ -16,6 +16,62 @@ TOOL.ClientConVar[ "topcon" ] = "1"
 TOOL.ClientConVar[ "botcon" ] = "1"
 TOOL.ClientConVar[ "rotated"] = "1"
 TOOL.Information = { { name = "left" } }
+
+
+--[[ TOOL.material_plaster1 = CreateMaterial("breakmat_plaster1", "VertexLitGeneric", {
+            ["$basetexture"] = "plaster/plasterwall016a",
+            ["$surfaceprop"] = "plaster",
+            ["$model"] = "0",
+            ["$flat"] = "1",
+            ["$nocull"] = "0",
+        })
+TOOL.material_plaster2 = CreateMaterial("breakmat_plaster2", "VertexLitGeneric", {
+
+            ["$basetexture"] = "plaster/plasterwall005c",
+            ["$surfaceprop"] = "plaster",
+            ["$model"] = "0",
+            ["$flat"] = "1",
+            ["$nocull"] = "0",
+        })
+TOOL.material_woodcrate = CreateMaterial("breakmat_woodcrate", "VertexLitGeneric", {
+
+            ["$basetexture"] = "props/woodcrate001a",
+            ["$basetexturetransform"] = "center .5 .5 scale 2 2 rotate 0 translate 0 0",
+            ["$surfaceprop"] = "wood_crate",
+            ["$model"] = "0",
+            ["$flat"] = "1",
+            ["$nocull"] = "0",
+        })
+TOOL.material_woodfloor1 = CreateMaterial("breakmat_woodfloor1","VertexLitGeneric", {
+            ["$basetexture"] = "wood/woodfloor005a",
+            ["$basetexturetransform"] = "center .5 .5 scale 2 2 rotate 0 translate 0 0",
+            ["$surfaceprop"] = "Wood_Panel",
+            ["$model"] = "0",
+            ["$flat"] = "1",
+            ["$nocull"] = "0",
+        })
+TOOL.material_woodfloor2 = CreateMaterial("breakmat_woodfloor2","VertexLitGeneric", {
+            ["$basetexture"] = "wood/woodfloor008a",
+            ["$basetexturetransform"] = "center .5 .5 scale 2 2 rotate 0 translate 0 0",
+            ["$surfaceprop"] = "Wood_Panel",
+            ["$model"] = "0",
+            ["$flat"] = "1",
+            ["$nocull"] = "0",
+        })
+TOOL.material_tilefloor = CreateMaterial("breakmat_tilefloor","VertexLitGeneric", {
+            ["$basetexture"] = "tile/tilefloor001a",
+            ["$basetexturetransform"] = "center .5 .5 scale 1 1 rotate 0 translate 0 0",
+            ["$surfaceprop"] = "tile",
+            ["$model"] = "0",
+            ["$flat"] = "1",
+            ["$nocull"] = "0",
+        }) ]]
+list.Add( "OverrideMaterials", "procedural/large/plaster1" )
+list.Add( "OverrideMaterials", "procedural/large/plaster2" )
+list.Add( "OverrideMaterials", "procedural/large/tilefloor" )
+list.Add( "OverrideMaterials", "procedural/small/woodcrate" )
+list.Add( "OverrideMaterials", "procedural/small/woodfloor" )
+list.Add( "OverrideMaterials", "procedural/small/woodfloor2" )
 if CLIENT then
     language.Add("tool.spawnwall.name", "Spawn Box")
     language.Add("tool.spawnwall.desc", "Spawns a box where you are aiming.")

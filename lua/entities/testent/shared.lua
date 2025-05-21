@@ -19,50 +19,9 @@ ENT.wall_size = Vector(128,128,0)
 ENT.Mins = Vector( -1, -1, -1 )
 ENT.Maxs = Vector(  ENT.wall_size.x,  16,  ENT.wall_size.y )
 ENT.mdlScale = 1
-ENT.texturescale = 1/128
+ENT.texturescale = 1/20
 ENT.Material = Material( "phoenix_storms/gear" )
-if CLIENT then
-    ENT.material_plaster1 = CreateMaterial("breakmat_plaster1", "VertexLitGeneric", {
-                ["$basetexture"] = "plaster/plasterwall016a",
-                ["$surfaceprop"] = "plaster",
-                ["$model"] = "0",
-                ["$flat"] = "1",
-                ["$nocull"] = "0",
-            })
-    ENT.material_plaster2 = CreateMaterial("breakmat_plaster2", "VertexLitGeneric", {
 
-                ["$basetexture"] = "plaster/plasterwall005c",
-                ["$surfaceprop"] = "plaster",
-                ["$model"] = "0",
-                ["$flat"] = "1",
-                ["$nocull"] = "0",
-            })
-    ENT.material_woodcrate = CreateMaterial("breakmat_woodcrate", "VertexLitGeneric", {
-
-                ["$basetexture"] = "props/woodcrate001a",
-                ["$basetexturetransform"] = "center .5 .5 scale 2 2 rotate 0 translate 0 0",
-                ["$surfaceprop"] = "wood_crate",
-                ["$model"] = "0",
-                ["$flat"] = "1",
-                ["$nocull"] = "0",
-            })
-    ENT.material_woodfloor1 = CreateMaterial("breakmat_woodfloor1","VertexLitGeneric", {
-                ["$basetexture"] = "wood/woodfloor005a",
-                ["$basetexturetransform"] = "center .5 .5 scale 2 2 rotate 0 translate 0 0",
-                ["$surfaceprop"] = "Wood_Panel",
-                ["$model"] = "0",
-                ["$flat"] = "1",
-                ["$nocull"] = "0",
-            })
-    ENT.material_woodfloor2 = CreateMaterial("breakmat_woodfloor2","VertexLitGeneric", {
-                ["$basetexture"] = "wood/woodfloor008a",
-                ["$basetexturetransform"] = "center .5 .5 scale 2 2 rotate 0 translate 0 0",
-                ["$surfaceprop"] = "Wood_Panel",
-                ["$model"] = "0",
-                ["$flat"] = "1",
-                ["$nocull"] = "0",
-            })
-end
 function ENT:SetupDataTables()
 	self:NetworkVar( "Float", 0, "Size_X" )
 	self:NetworkVar( "Float", "Size_Y" )
@@ -624,7 +583,7 @@ function ENT:trianglePolyState(InputState)
                     local polyconnect,holes = self:connectPolygonHoles(polygons, p_i, floatingoutpol)
                     self:triangulatePolygon(polyconnect,floatingpositions)
                     local points_outer = calculateOuterPositions(floatingoutpol, self.thickness)
-                    local floatingmesh = self:generateMeshFromPoints(floatingpositions, points_outer)
+                    local floatingmesh = self:generateMeshFromPoints(floatingpositions, points_outer,-20)
                     local ents = ents
                     local c_Model2 = ents.CreateClientside("coltest")
                     if IsValid(c_Model2) then 
@@ -784,7 +743,7 @@ function ENT:Initialize()
         self.physicsdata = nil
     end
     if CLIENT then 
-        self.Material = self.material_woodfloor2
+        --self.Material = self.material_tilefloor
         local WallHitReceived = function( lengthOfMessageReceived, playerWhoSentTheMessageToUs )
 		-- Note how we read them all in the same order as they are written:
         local holetype = net.ReadUInt(4)
@@ -871,8 +830,8 @@ function ENT:BuildFakeHoleMeshes(holetype)
     local holepolypositions = {}
     self:triangulatePolygon(holepoly.regions[1],holepolypositions)
     local points_outer = calculateOuterPositions(holepoly, self.thickness)
-    hmesh = self:generateMeshFromPoints(holepolypositions, {})
-    hmesh_outer = self:generateMeshFromPoints({}, points_outer)
+    hmesh = self:generateMeshFromPoints(holepolypositions, {},0)
+    hmesh_outer = self:generateMeshFromPoints({}, points_outer,0)
     return hmesh, hmesh_outer
 end
 
@@ -884,7 +843,7 @@ function ENT:BuildGibMeshes()
         --local points_outer = calculateOuterPositions(gibpoly, self.thickness)
         local actualthickness = self.thickness
         self.thickness = 0
-        gibmesh = self:generateMeshFromPoints(gibpolypositions,{})
+        gibmesh = self:generateMeshFromPoints(gibpolypositions,{},10)
         self.thickness = actualthickness
         table.insert(self.gibmeshes,gibmesh)
     end
@@ -1387,7 +1346,7 @@ function ENT:BuildMeshFromPositions(positions,points_outer)
     mesh.End()
 end
 
-function ENT:generateMeshFromPoints(positions,points_outer)
+function ENT:generateMeshFromPoints(positions,points_outer,tex_offset)
     local texcoord  = {
         Vector( 0, 0.2, 0.2 ),
         Vector(  0, 0, 0.2 ),
@@ -1417,17 +1376,17 @@ function ENT:generateMeshFromPoints(positions,points_outer)
 
         local tangentS, tangentT = CalculateTangents(v0, v1, v2)
         mesh.Position( v0)
-        mesh.TexCoord( 0, v0.x*uvscale, -v0.z*uvscale+0.1)
+        mesh.TexCoord( 0, v0.x*uvscale, (-v0.z+tex_offset)*uvscale)
         mesh.Normal(faceNorm)
         mesh.AdvanceVertex()
 
         mesh.Position( v1)
-        mesh.TexCoord( 0, v1.x*uvscale, -v1.z*uvscale+0.1)
+        mesh.TexCoord( 0, v1.x*uvscale, (-v1.z+tex_offset)*uvscale)
         mesh.Normal(faceNorm)
         mesh.AdvanceVertex()
 
         mesh.Position( v2)
-        mesh.TexCoord( 0, v2.x*uvscale, -v2.z*uvscale+0.1)
+        mesh.TexCoord( 0, v2.x*uvscale, (-v2.z+tex_offset)*uvscale)
         mesh.Normal(faceNorm)
         mesh.AdvanceVertex()
 
@@ -1444,17 +1403,17 @@ function ENT:generateMeshFromPoints(positions,points_outer)
 
         local tangentS, tangentT = CalculateTangents(v0, v1, v2)
         mesh.Position( v0)
-        mesh.TexCoord( 0, v0.x*uvscale, -v0.z*uvscale+0.1)
+        mesh.TexCoord( 0, v0.x*uvscale, (-v0.z+tex_offset)*uvscale)
         mesh.Normal(faceNorm2)
         mesh.AdvanceVertex()
 
         mesh.Position( v1)
-        mesh.TexCoord( 0, v1.x*uvscale, -v1.z*uvscale+0.1)
+        mesh.TexCoord( 0, v1.x*uvscale, (-v1.z+tex_offset)*uvscale)
         mesh.Normal(faceNorm2)
         mesh.AdvanceVertex()
 
         mesh.Position( v2)
-        mesh.TexCoord( 0, v2.x*uvscale, -v2.z*uvscale+0.1)
+        mesh.TexCoord( 0, v2.x*uvscale, (-v2.z+tex_offset)*uvscale)
         mesh.Normal(faceNorm2)
         mesh.AdvanceVertex()
     end

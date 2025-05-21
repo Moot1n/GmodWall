@@ -1,0 +1,9 @@
+"VertexLitGeneric"
+{
+            "$basetexture"  "wood/woodfloor005a"
+            "$basetexturetransform"  "center 0 0 scale 0.3125 0.3125 rotate 0 translate 0 0"
+            "$surfaceprop"  "Wood_Panel"
+            "$model"  "0"
+            "$flat"  "1"
+            "$nocull"  "0"
+}
