@@ -861,9 +861,9 @@ function ENT:PushFakeHole(position,holetype,localhitpos)
     if (holetype~=5 && holetype ~=6) then
         ang = math.deg(localhitpos.x*100+localhitpos.z*100)
     end
-    local angle = Angle(0,0,0)
+    local angle = self:GetAngles()
     angle:RotateAroundAxis(-self:GetRight(),ang)
-    holeent:SetAngles(self:GetAngles()+angle)
+    holeent:SetAngles(angle)
     holeent:Spawn()
     holeent:SetNoDraw(true)
     --self:DeleteOnRemove( self.holeents )
