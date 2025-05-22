@@ -15,6 +15,11 @@ TOOL.ClientConVar[ "rightcon" ] = "1"
 TOOL.ClientConVar[ "topcon" ] = "1"
 TOOL.ClientConVar[ "botcon" ] = "1"
 TOOL.ClientConVar[ "rotated"] = "1"
+
+TOOL.ClientConVar["stack_left"] = "0"
+TOOL.ClientConVar["stack_up"] = "0"
+TOOL.ClientConVar["stack_thick"] = "0"
+
 TOOL.Information = { { name = "left" } }
 
 
@@ -85,12 +90,52 @@ function TOOL:LeftClick(trace)
     if not IsValid(ply) then return false end
     
     pos, angle = self:getBoxTransform(trace,ply)
-    
-    local ent = ents.Create("testent")
-    if not IsValid(ent) then return false end
     local size_x = math.Clamp(math.floor(self:GetClientNumber( "size_x" )),0,256)
     local size_y = math.Clamp(math.floor(self:GetClientNumber( "size_y" )),0,256)
     local thickness = math.floor(self:GetClientNumber( "thickness" ))
+    --self:SpawnTheWall(pos,angle,size_x,size_y,thickness,ply)
+    local step_i = 1
+    if (self:GetClientNumber( "stack_up" )<0) then step_i = -1 end
+    for i=0, math.floor(self:GetClientNumber( "stack_up" )-step_i),step_i do
+        --render.DrawWireframeBox( pos, ang, Vector(0,0,i*size_y), Vector(size_x,thickness,size_y) )
+        
+        local upvec = Vector(0,0,i*size_y)
+        upvec:Rotate(angle)
+        --if i >= 1 then
+        --self:SpawnTheWall(pos+upvec,angle,size_x,size_y,thickness,ply)
+        --end
+        local step_j = 1
+        if (self:GetClientNumber( "stack_left" )<0) then step_j = -1 end
+        for j=0,math.floor(self:GetClientNumber("stack_left")-step_j),step_j do
+            local leftvec = Vector(j*size_x,0,0)
+            leftvec:Rotate(angle)
+            leftvec = leftvec+upvec
+            --self:SpawnTheWall(pos+leftvec,angle,size_x,size_y,thickness,ply)
+
+            --render.DrawWireframeBox( pos, ang, Vector(j*size_x,0,i*size_y), Vector(size_x,thickness,size_y) )
+            local step_k = 1
+            local subtract = 0
+            if (self:GetClientNumber( "stack_thick" )<0) then 
+                step_k = -1 
+                subtract = -1
+            end
+            
+            for k=0, self:GetClientNumber("stack_thick")-subtract, step_k do
+                local thickvec = Vector(0,-k*thickness,0)
+                thickvec:Rotate(angle)
+                thickvec = leftvec+thickvec
+                self:SpawnTheWall(pos+thickvec,angle,size_x,size_y,thickness,ply)
+                --render.DrawWireframeBox( pos, ang, Vector(j*size_x,-k*thickness,i*size_y), Vector(size_x,thickness,size_y) )
+            end
+        end
+    end
+
+    return true
+end
+
+function TOOL:SpawnTheWall(pos,angle,size_x,size_y,thickness,ply)
+    local ent = ents.Create("testent")
+    if not IsValid(ent) then return false end
     if self:GetClientNumber( "leftcon" ) == 1 then ent:SetLeftCon(true) else ent:SetLeftCon(false) end
     if self:GetClientNumber( "rightcon" ) == 1 then ent:SetRightCon(true) else ent:SetRightCon(false) end
     if self:GetClientNumber( "topcon" ) == 1 then ent:SetTopCon(true) else ent:SetTopCon(false) end
@@ -100,7 +145,6 @@ function TOOL:LeftClick(trace)
     ent:SetThickness(thickness)
     ent:SetPos(pos)
     ent:SetAngles(angle)
-    //ent.wall_size = Vector(256,256,0)
     ent:Spawn()
 
     undo.Create("Spawned Box")
@@ -109,8 +153,6 @@ function TOOL:LeftClick(trace)
     undo.Finish()
 
     cleanup.Add(ply, "props", ent)
-
-    return true
 end
 
 function TOOL:RightClick( trace )
@@ -137,6 +179,7 @@ function TOOL:getBoxTransform(tr,ply)
     rotangle.y = rotangle.y+90
     if math.abs(normal.z) <= 0.95 then
         rotangle = normal:Angle()
+        --rotangle.y = rotangle.y+90
     end
     if self:GetClientNumber( "rotated" ) == 1 then
         rotangle.z = rotangle.z+90
@@ -158,7 +201,21 @@ function TOOL:DrawHUD()
         local size_y = math.Clamp(math.floor(self:GetClientNumber( "size_y" )),0,256)
         local thickness = math.floor(self:GetClientNumber( "thickness" ))
 		cam.Start3D()
-		render.DrawWireframeBox( pos, ang, Vector(0,0,0), Vector(size_x,thickness,size_y) )
+        local step_i = 1
+        if (self:GetClientNumber( "stack_up" )<0) then step_i = -1 end
+        for i=0, self:GetClientNumber( "stack_up" ),step_i do
+            --render.DrawWireframeBox( pos, ang, Vector(0,0,i*size_y), Vector(size_x,thickness,size_y) )
+            local step_j = 1
+            if (self:GetClientNumber( "stack_left" )<0) then step_j = -1 end
+            for j=0,self:GetClientNumber("stack_left"),step_j do
+		        --render.DrawWireframeBox( pos, ang, Vector(j*size_x,0,i*size_y), Vector(size_x,thickness,size_y) )
+                local step_k = 1
+                if (self:GetClientNumber( "stack_thick" )<0) then step_k = -1 end
+                for k=0, self:GetClientNumber("stack_thick"), step_k do
+                    render.DrawWireframeBox( pos, ang, Vector(j*size_x,-k*thickness,i*size_y), Vector(size_x,thickness,size_y) )
+                end
+            end
+        end
 		cam.End3D()
 end
 
@@ -177,4 +234,8 @@ function TOOL.BuildCPanel( CPanel )
     CPanel:CheckBox("right connected", "spawnwall_rightcon")
     CPanel:CheckBox("top connected", "spawnwall_topcon")
     CPanel:CheckBox("bottom connected", "spawnwall_botcon")
+
+    CPanel:NumSlider("Stack Left", "spawnwall_stack_left",-31,31)
+    CPanel:NumSlider("Stack Up", "spawnwall_stack_up",-31,31)
+    CPanel:NumSlider("Stack Thick", "spawnwall_stack_thick",-31,31)
 end

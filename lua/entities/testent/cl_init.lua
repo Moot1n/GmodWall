@@ -7,8 +7,6 @@ local render_SetLocalModelLights = render.SetLocalModelLights
 
 -- Client-side draw function for the Entity
 function ENT:Draw()
-    
-    
     render.SetStencilEnable( true )
     render.ClearStencil()
     render.SetStencilTestMask( 255 )
@@ -24,6 +22,7 @@ function ENT:Draw()
     
     render.SetStencilFailOperation( STENCILOPERATION_KEEP )
     render.SetStencilCompareFunction( STENCILCOMPARISONFUNCTION_NOTEQUAL )
+    
     self:DrawModel() -- Draws the model of the Entity. This function is called every frame.
     render.SetStencilEnable( false )
     --for i=1, #self.holeents do

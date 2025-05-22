@@ -630,7 +630,7 @@ end
 function is_outer_region_floating(region,wall_size,lc,rc,tc,bc)
     local floating = true
     for i = 1, #region do
-        if (region[i][1] == 0 and lc) or (region[i][1] == wall_size.x and rc) or (region[i][2] == 0 and bc) or (region[i][2] == wall_size.y and tc) then
+        if (region[i][1] == 0 and rc) or (region[i][1] == wall_size.x and lc) or (region[i][2] == 0 and bc) or (region[i][2] == wall_size.y and tc) then
             floating = false
         end
     end
@@ -732,8 +732,8 @@ function ENT:Initialize()
         --self.leftcon = true
         --self.rightcon = true
     end
-    self.Mins = Vector( -1, -1, -1 )
-    self.Maxs = Vector(  self.wall_size.x,  16,  self.wall_size.y )
+    --self.Mins = Vector( -1, -1, -1 )
+    --self.Maxs = Vector(  self.wall_size.x,  16,  self.wall_size.y )
     self.tri_calc_state = {state=0,clips={}, polygons={}, p_i=1,outpol = {}, positions={},polyconnect={},seg1 = {}, seg2 = {}}
     self.PolygonHoles = {}
     self.floatingPolygons = {}
@@ -775,6 +775,8 @@ function ENT:Initialize()
 
     local current_polygons = {}
     if CLIENT then
+        self.Mins = Vector( -1, -1, -1 )
+        self.Maxs = Vector(  self.wall_size.x,  self.thickness,  self.wall_size.y )
         self:CreateMesh()
         self:PhysicsFromMesh( self:GetVertsPhys() )
         self:SetSolid( SOLID_VPHYSICS ) -- Makes the Entity solid, allowing for collisions.
@@ -855,11 +857,13 @@ function ENT:PushFakeHole(position,holetype,localhitpos)
     if not IsValid(holeent) then return false end
     holeent.RenderMesh = self.holemesh[idx]
     holeent:SetPos(position)
-    local ang = Vector(0,0,0)
+    local ang = 0
     if (holetype~=5 && holetype ~=6) then
         ang = math.deg(localhitpos.x*100+localhitpos.z*100)
     end
-    holeent:SetAngles(self:GetAngles()+Angle(ang,0,0))
+    local angle = Angle(0,0,0)
+    angle:RotateAroundAxis(-self:GetRight(),ang)
+    holeent:SetAngles(self:GetAngles()+angle)
     holeent:Spawn()
     holeent:SetNoDraw(true)
     --self:DeleteOnRemove( self.holeents )
