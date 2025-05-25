@@ -8,12 +8,12 @@ local epsilon = Epsilon()
 -- Defines the Entity's type, base, printable name, and author for shared access (both server and client)
 ENT.Type = "anim" -- Sets the Entity type to 'anim', indicating it's an animated Entity.
 ENT.Base = "base_gmodentity" -- Specifies that this Entity is based on the 'base_gmodentity', inheriting its functionality.
-ENT.PrintName = "Test Entity" -- The name that will appear in the spawn menu.
+ENT.PrintName = "Procedural Wall" -- The name that will appear in the spawn menu.
 ENT.Author = "Moot1n" -- The author's name for this Entity.
 ENT.Category = "Test entities" -- The category for this Entity in the spawn menu.
 ENT.Contact = "STEAM_0:1:12345678" -- The contact details for the author of this Entity.
 ENT.Purpose = "To test the creation of entities." -- The purpose of this Entity.
-ENT.Spawnable = true -- Specifies whether this Entity can be spawned by players in the spawn menu.
+ENT.Spawnable = false -- Specifies whether this Entity can be spawned by players in the spawn menu.
 
 ENT.wall_size = Vector(128,128,0)
 ENT.Mins = Vector( -1, -1, -1 )
@@ -232,7 +232,7 @@ local function connectHoles2(outer, holes)
         -- Exit the while loop if we're there for too long
         hole_idx = hole_idx +1
         if hole_idx > 1000 then
-            print("ASASASAS WTFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF!!!!!")
+            print("Procedural Wall ERROR: TOO MANY HOLES / HOLE JOINING ERROR!!!")
             break
         end
     end
@@ -380,7 +380,7 @@ function segleftofseg(sega, segb)
     if check ~= -1 then return not check end
 
     -- Should never get here
-    print("CASE WTF!!!!!!!!!!!!!!!!!!!!!!!!!!!!")
+    print("Procedural Wall ERORR: COULD NOT FIND LEFT SEGMENT")
     return false
 end
 
@@ -719,7 +719,7 @@ function ENT:Initialize()
     --local wall_size = Vector(128,128,0)
     --trianglePoly()
 
-    print(self:GetSize_X())
+    --print(self:GetSize_X())
     self.wall_size = Vector(self:GetSize_X(),self:GetSize_Y(),0 )
     self.thickness = self:GetThickness()
     self.leftcon = self:GetLeftCon()
@@ -1073,7 +1073,7 @@ end
 -- Disallow meshes with only two triangles that both have a volume of less than 1
 -- Disallow meshes with only degenerate triangles
 function check_for_degenerate_triangles(positions)
-    print("CHECKING DEGENERATE")
+    --print("CHECKING DEGENERATE")
     local twotriangles =  #positions == 6
     for i = 1, #positions,3 do
         local v0 = positions[i]

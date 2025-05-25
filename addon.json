@@ -1,11 +1,9 @@
 {
-	"title"		:	"Procedural Destruction",
-	"type"		:	"entity",
-	"tags"		:	[ "build", "realism" ],
-	"ignore"	:
+	"title": "Procedural Wall Destruction",
+	"type": "effects",
+	"tags": 
 	[
-		"*.psd",
-		"*.vcproj",
-		"*.svn*"
+		"build",
+		"realism"
 	]
 }
