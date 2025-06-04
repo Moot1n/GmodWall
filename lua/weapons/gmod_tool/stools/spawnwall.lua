@@ -77,12 +77,7 @@ list.Add( "OverrideMaterials", "procedural/large/tilefloor" )
 list.Add( "OverrideMaterials", "procedural/small/woodcrate" )
 list.Add( "OverrideMaterials", "procedural/small/woodfloor" )
 list.Add( "OverrideMaterials", "procedural/small/woodfloor2" )
-if CLIENT then
-    language.Add("tool.spawnwall.name", "Spawn Wall")
-    language.Add("tool.spawnwall.desc", "Spawns a wall where you are aiming.")
-    language.Add("tool.spawnwall.0", "Left click to spawn a wall.")
-    language.Add("tool.spawnwall.1", "Left click to spawn a wall.")
-end
+
 -- Left Click Function
 function TOOL:LeftClick(trace)
     if CLIENT then return true end
