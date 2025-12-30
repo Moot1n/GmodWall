@@ -16,9 +16,9 @@ TOOL.ClientConVar[ "topcon" ] = "1"
 TOOL.ClientConVar[ "botcon" ] = "1"
 TOOL.ClientConVar[ "rotated"] = "1"
 
-TOOL.ClientConVar["stack_left"] = "0"
-TOOL.ClientConVar["stack_up"] = "0"
-TOOL.ClientConVar["stack_thick"] = "0"
+TOOL.ClientConVar["stack_left"] = "1"
+TOOL.ClientConVar["stack_up"] = "1"
+TOOL.ClientConVar["stack_thick"] = "1"
 
 TOOL.Information = { { name = "left" } }
 
@@ -78,9 +78,10 @@ list.Add( "OverrideMaterials", "procedural/small/woodcrate" )
 list.Add( "OverrideMaterials", "procedural/small/woodfloor" )
 list.Add( "OverrideMaterials", "procedural/small/woodfloor2" )
 if CLIENT then
-    language.Add("tool.spawnwall.name", "Spawn Box")
-    language.Add("tool.spawnwall.desc", "Spawns a box where you are aiming.")
-    language.Add("tool.spawnwall.0", "Left click to spawn a box.")
+    language.Add("tool.spawnwall.name", "Spawn Wall")
+    language.Add("tool.spawnwall.desc", "Spawns a wall where you are aiming.")
+    language.Add("tool.spawnwall.0", "Left click to spawn a wall.")
+    language.Add("tool.spawnwall.1", "Left click to spawn a wall.")
 end
 -- Left Click Function
 function TOOL:LeftClick(trace)
@@ -94,19 +95,28 @@ function TOOL:LeftClick(trace)
     local size_y = math.Clamp(math.floor(self:GetClientNumber( "size_y" )),0,256)
     local thickness = math.floor(self:GetClientNumber( "thickness" ))
     --self:SpawnTheWall(pos,angle,size_x,size_y,thickness,ply)
+    local spawned_wall = false
     local step_i = 1
-    if (self:GetClientNumber( "stack_up" )<0) then step_i = -1 end
-    for i=0, math.floor(self:GetClientNumber( "stack_up" )-step_i),step_i do
+
+    local stackthick = self:GetClientNumber( "stack_thick" )-1
+    local stackup = self:GetClientNumber( "stack_up" )
+    local stackleft = self:GetClientNumber( "stack_left" )
+    if math.Round(stackup) == 0 then stackup = 1 end
+    if math.Round(stackleft) == 0 then stackleft = 1 end
+    if stackthick == -1 then stackthick = 0 end
+    if (stackup<0) then step_i = -1 end
+    for i=0, math.floor(stackup-step_i),step_i do
         --render.DrawWireframeBox( pos, ang, Vector(0,0,i*size_y), Vector(size_x,thickness,size_y) )
         
         local upvec = Vector(0,0,i*size_y)
         upvec:Rotate(angle)
+        
         --if i >= 1 then
         --self:SpawnTheWall(pos+upvec,angle,size_x,size_y,thickness,ply)
         --end
         local step_j = 1
-        if (self:GetClientNumber( "stack_left" )<0) then step_j = -1 end
-        for j=0,math.floor(self:GetClientNumber("stack_left")-step_j),step_j do
+        if (stackleft<0) then step_j = -1 end
+        for j=0,math.floor(stackleft-step_j),step_j do
             local leftvec = Vector(j*size_x,0,0)
             leftvec:Rotate(angle)
             leftvec = leftvec+upvec
@@ -120,21 +130,25 @@ function TOOL:LeftClick(trace)
                 subtract = -1
             end
             
-            for k=0, self:GetClientNumber("stack_thick")-subtract, step_k do
+            for k=0, stackthick-subtract, step_k do
                 local thickvec = Vector(0,-k*thickness,0)
                 thickvec:Rotate(angle)
                 thickvec = leftvec+thickvec
+                spawned_wall = true
                 self:SpawnTheWall(pos+thickvec,angle,size_x,size_y,thickness,ply)
                 --render.DrawWireframeBox( pos, ang, Vector(j*size_x,-k*thickness,i*size_y), Vector(size_x,thickness,size_y) )
             end
         end
+    end
+    if not spawned_wall then
+        self:SpawnTheWall(pos,angle,size_x,size_y,thickness,ply)
     end
 
     return true
 end
 
 function TOOL:SpawnTheWall(pos,angle,size_x,size_y,thickness,ply)
-    local ent = ents.Create("testent")
+    local ent = ents.Create("proceduralwall")
     if not IsValid(ent) then return false end
     if self:GetClientNumber( "leftcon" ) == 1 then ent:SetLeftCon(true) else ent:SetLeftCon(false) end
     if self:GetClientNumber( "rightcon" ) == 1 then ent:SetRightCon(true) else ent:SetRightCon(false) end
@@ -147,7 +161,7 @@ function TOOL:SpawnTheWall(pos,angle,size_x,size_y,thickness,ply)
     ent:SetAngles(angle)
     ent:Spawn()
 
-    undo.Create("Spawned Box")
+    undo.Create("Spawned Wall")
         undo.AddEntity(ent)
         undo.SetPlayer(ply)
     undo.Finish()
@@ -200,6 +214,7 @@ function TOOL:DrawHUD()
         local size_x = math.Clamp(math.floor(self:GetClientNumber( "size_x" )),0,256)
         local size_y = math.Clamp(math.floor(self:GetClientNumber( "size_y" )),0,256)
         local thickness = math.floor(self:GetClientNumber( "thickness" ))
+        local stackthick = self:GetClientNumber( "stack_thick" )-1
 		cam.Start3D()
         local step_i = 1
         if (self:GetClientNumber( "stack_up" )<0) then step_i = -1 end
@@ -210,8 +225,9 @@ function TOOL:DrawHUD()
             for j=0,self:GetClientNumber("stack_left"),step_j do
 		        --render.DrawWireframeBox( pos, ang, Vector(j*size_x,0,i*size_y), Vector(size_x,thickness,size_y) )
                 local step_k = 1
-                if (self:GetClientNumber( "stack_thick" )<0) then step_k = -1 end
-                for k=0, self:GetClientNumber("stack_thick"), step_k do
+                
+                if (stackthick<0) then step_k = -1 end
+                for k=0, stackthick, step_k do
                     render.DrawWireframeBox( pos, ang, Vector(j*size_x,-k*thickness,i*size_y), Vector(size_x,thickness,size_y) )
                 end
             end
@@ -223,19 +239,19 @@ end
 --local ConVarsDefault = TOOL:BuildConVarList()
 function TOOL.BuildCPanel( CPanel )
 
-	CPanel:Help( "#tool.spawnbox.desc" )
+	CPanel:Help( "#spawnwall_helptext" )
 	--CPanel:ToolPresets( "spawnbox", ConVarsDefault )
-	CPanel:NumSlider( "#tool.spawnbox.size_x", "spawnwall_size_x", 8, 256 )
-    CPanel:NumSlider( "#tool.spawnbox.size_y", "spawnwall_size_y", 8, 256 )
-    CPanel:NumSlider( "#tool.spawnbox.thickness", "spawnwall_thickness", 0, 16 )
-    CPanel:NumSlider( "#tool.spawnbox.gridsnap", "spawnwall_gridsnap", 0, 128 )
-    CPanel:NumSlider( "#tool.spawnbox.rotsnap", "spawnwall_rotsnap", 0, 128 )
-    CPanel:CheckBox("left connected", "spawnwall_leftcon")
-    CPanel:CheckBox("right connected", "spawnwall_rightcon")
-    CPanel:CheckBox("top connected", "spawnwall_topcon")
-    CPanel:CheckBox("bottom connected", "spawnwall_botcon")
+	CPanel:NumSlider( "#spawnwall_size_x", "spawnwall_size_x", 8, 256 )
+    CPanel:NumSlider( "#spawnwall_size_y", "spawnwall_size_y", 8, 256 )
+    CPanel:NumSlider( "#spawnwall_thickness", "spawnwall_thickness", 0, 16 )
+    CPanel:NumSlider( "#spawnwall_gridsnap", "spawnwall_gridsnap", 0, 128 )
+    CPanel:NumSlider( "#spawnwall_rotsnap", "spawnwall_rotsnap", 0, 128 )
+    CPanel:CheckBox("#spawnwall_leftcon", "spawnwall_leftcon")
+    CPanel:CheckBox("#spawnwall_rightcon", "spawnwall_rightcon")
+    CPanel:CheckBox("#spawnwall_topcon", "spawnwall_topcon")
+    CPanel:CheckBox("#spawnwall_botcon", "spawnwall_botcon")
 
-    CPanel:NumSlider("Stack Left", "spawnwall_stack_left",-31,31)
-    CPanel:NumSlider("Stack Up", "spawnwall_stack_up",-31,31)
-    CPanel:NumSlider("Stack Thick", "spawnwall_stack_thick",-31,31)
+    CPanel:NumSlider("#spawnwall_stack_left", "spawnwall_stack_left",-31,31)
+    CPanel:NumSlider("#spawnwall_stack_up", "spawnwall_stack_up",-31,31)
+    CPanel:NumSlider("#spawnwall_stack_thick", "spawnwall_stack_thick",-31,31)
 end

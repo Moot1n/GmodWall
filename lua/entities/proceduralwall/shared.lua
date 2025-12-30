@@ -7,13 +7,13 @@ local Epsilon = include("PolyBool/Epsilon.lua")
 local epsilon = Epsilon()
 -- Defines the Entity's type, base, printable name, and author for shared access (both server and client)
 ENT.Type = "anim" -- Sets the Entity type to 'anim', indicating it's an animated Entity.
-ENT.Base = "base_gmodentity" -- Specifies that this Entity is based on the 'base_gmodentity', inheriting its functionality.
-ENT.PrintName = "Test Entity" -- The name that will appear in the spawn menu.
+ENT.Base = "base_entity" -- Specifies that this Entity is based on the 'base_gmodentity', inheriting its functionality.
+ENT.PrintName = "Procedural Wall" -- The name that will appear in the spawn menu.
 ENT.Author = "Moot1n" -- The author's name for this Entity.
 ENT.Category = "Test entities" -- The category for this Entity in the spawn menu.
 ENT.Contact = "STEAM_0:1:12345678" -- The contact details for the author of this Entity.
 ENT.Purpose = "To test the creation of entities." -- The purpose of this Entity.
-ENT.Spawnable = true -- Specifies whether this Entity can be spawned by players in the spawn menu.
+ENT.Spawnable = false -- Specifies whether this Entity can be spawned by players in the spawn menu.
 
 ENT.wall_size = Vector(128,128,0)
 ENT.Mins = Vector( -1, -1, -1 )
@@ -232,7 +232,7 @@ local function connectHoles2(outer, holes)
         -- Exit the while loop if we're there for too long
         hole_idx = hole_idx +1
         if hole_idx > 1000 then
-            print("ASASASAS WTFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF!!!!!")
+            print("Procedural Wall ERROR: TOO MANY HOLES / HOLE JOINING ERROR!!!")
             break
         end
     end
@@ -380,7 +380,7 @@ function segleftofseg(sega, segb)
     if check ~= -1 then return not check end
 
     -- Should never get here
-    print("CASE WTF!!!!!!!!!!!!!!!!!!!!!!!!!!!!")
+    print("Procedural Wall ERORR: COULD NOT FIND LEFT SEGMENT")
     return false
 end
 
@@ -651,12 +651,28 @@ function ENT:GetVertsPhys()
     return positions
 end
 
+
+
 function ENT:OnTakeDamage(damage)
     local damagepos = damage:GetDamagePosition()
     local damageAmount = damage:GetBaseDamage()
+    if (damage:GetInflictor():GetClass() == "weapon_zm_improvised") then
+        --local tr = util.QuickTrace(+damage:GetAttacker():GetAimVector()*100, ,damage:GetAttacker())
+        local tr = util.TraceLine({start=damage:GetAttacker():GetShootPos(), endpos=damage:GetAttacker():GetAimVector()*1500+damage:GetAttacker():GetShootPos(), filter=damage:GetAttacker()})
+        damagepos = tr.HitPos
+        damageAmount=damageAmount*2
+    end
+    
     if not CLIENT then
+        -- If too many calculations then start ignoring some
+        if (#self.tri_calc_state.clips > 15) then 
+            if math.random(5) != 1 then return end
+            damageAmount=damageAmount*8 -- Make the hole bigger to compensate
+            damage:SetDamageType(DMG_BUCKSHOT)
+        end
+        -- Still too much happening then cancel
+        if (#self.tri_calc_state.clips > 30) then return end
         localDamagePos = self:WorldToLocal(damagepos)
-        
         --self:PhysicsFromMesh(self.physicsPoly)
         local x = math.floor(localDamagePos.x*1000)
         local z = math.floor(localDamagePos.z*1000)
@@ -681,6 +697,7 @@ function ENT:OnTakeDamage(damage)
             if damageAmount > 10 then holetype = 5 end
             if damageAmount > 80 then holetype = 6 end
         elseif damage:IsDamageType(DMG_BUCKSHOT) then
+            
             if damageAmount > 35 then holetype = 3 end
             if damageAmount > 60 then holetype = 4 end
             if damageAmount > 100 then holetype = 5 end
@@ -718,8 +735,7 @@ end
 function ENT:Initialize()
     --local wall_size = Vector(128,128,0)
     --trianglePoly()
-
-    print(self:GetSize_X())
+    --print(self:GetSize_X())
     self.wall_size = Vector(self:GetSize_X(),self:GetSize_Y(),0 )
     self.thickness = self:GetThickness()
     self.leftcon = self:GetLeftCon()
@@ -1073,7 +1089,7 @@ end
 -- Disallow meshes with only two triangles that both have a volume of less than 1
 -- Disallow meshes with only degenerate triangles
 function check_for_degenerate_triangles(positions)
-    print("CHECKING DEGENERATE")
+    --print("CHECKING DEGENERATE")
     local twotriangles =  #positions == 6
     for i = 1, #positions,3 do
         local v0 = positions[i]
@@ -1118,8 +1134,8 @@ function ENT:Think()
             --local mins, maxs = self.physicsdata.colData.HitObject:SetVelocity(self.physicsdata.colData.HitObject)
             -- Fix Combine Ball Relfection
             
-
-
+            
+            local do_physdamage = true
 
             local damagepos = self.physicsdata.colData.HitPos
             localDamagePos = self:WorldToLocal(damagepos)
@@ -1136,9 +1152,17 @@ function ENT:Think()
                 local mass = self.physicsdata.colData.HitObject:GetMass()
                 local speed = self.physicsdata.colData.Speed
                 local momentum = mass*speed
+                
+                -- If there is too much happening, make a big hole sometimes and sometimes nothing
+                if (#self.tri_calc_state.clips > 10) then 
+                    if math.random(5) != 1 then do_physdamage = false end
+                    momentum = momentum * 5
+                end
+                -- Still too much happening then cancel
+                if (#self.tri_calc_state.clips > 20) then do_physdamage = false end
+
                 if momentum < 1000 then
-                    self.physicsdata = nil
-                    return 
+                    do_physdamage = false
                 elseif momentum < 5000 then
                     holetype = 1
                 elseif momentum < 80000 then
@@ -1157,22 +1181,24 @@ function ENT:Think()
                 end
             else
                 self.physicsdata = nil
-                return 
+                 do_physdamage = false
             end
             if localDamagePos.x < -20 || localDamagePos.z < -20 || localDamagePos.z > self.wall_size.y+20 || localDamagePos.x > self.wall_size.x+20 then
                 self.physicsdata = nil
-                return
+                do_physdamage = false
             end
             --[[ print("DAMAGEDAMAGE")
             print(sentHitPos)
             print(damageAmount) ]]
-            self:UpdateMeshHit(sentHitPos,holetype)
-            net.Start( "WallHit"..self:EntIndex() )
-                net.WriteUInt(holetype, 4)
-                net.WriteInt( x,19 )
-                net.WriteInt( z,19 )
-            net.Broadcast() --Send all the data between now and the last net.Start() to the server.
-            self.physicsdata = nil
+            if (do_physdamage) then
+                self:UpdateMeshHit(sentHitPos,holetype)
+                net.Start( "WallHit"..self:EntIndex() )
+                    net.WriteUInt(holetype, 4)
+                    net.WriteInt( x,19 )
+                    net.WriteInt( z,19 )
+                net.Broadcast() --Send all the data between now and the last net.Start() to the server.
+                self.physicsdata = nil
+            end
         end
     end
     if CLIENT then
